@@ -138,6 +138,122 @@ All API endpoints fully implemented and tested:
 
 ---
 
+## Session: iOS Views + Landing Page
+**Date:** 2025-12-14
+
+### Completed
+
+#### iOS App - Full View Implementation ✅
+All major views now complete with live API integration:
+
+- [x] **APIService.swift** - Full API client connecting to FastAPI backend
+  - Async/await HTTP methods with JWT authentication
+  - Request/response models for all endpoints
+  - Error handling with typed APIError enum
+
+- [x] **AuthManager.swift** - Authentication state management
+  - Token storage in UserDefaults
+  - Login, register, logout flows
+  - User caching for offline access
+  - LoginView included
+
+- [x] **ProfileView.swift** - User profile with gamification
+  - XP progress bar with level display
+  - Stats grid (readings, verified, streak, trust score, etc.)
+  - Badges section with horizontal scroll
+  - Account actions (referrals, subscription, logout)
+
+- [x] **ReferralView.swift** - Referral system
+  - Display referral code with copy/share
+  - Rewards ladder visualization (1/5/10/25 tiers)
+  - Apply referral code form
+  - ShareSheet UIKit integration
+
+- [x] **SubscriptionView.swift** - StoreKit 2 paywall
+  - Full StoreKit 2 integration (Products, Purchase, Restore)
+  - Tier cards for Free/Neighbor/Block/District
+  - Transaction listener for auto-updates
+  - Loading overlay and error handling
+
+- [x] **CalibrationView.swift** - Meter setup wizard
+  - 4-step wizard flow with progress bar
+  - Step 1: Meter type selection
+  - Step 2: Name, postal code, digit count
+  - Step 3: Sample reading input with visual digit boxes
+  - Step 4: Confirmation and API submission
+
+- [x] **SmartScanView.swift** - Camera + Vision OCR
+  - AVFoundation camera preview
+  - Real-time Vision text recognition
+  - Confidence scoring and candidate selection
+  - Result card with editing capability
+  - Flash toggle and manual entry options
+
+- [x] **ContentView.swift** - Main app structure
+  - TabView with 4 tabs (Meters, Verify, Campaigns, Profile)
+  - MetersListView with scan trigger
+  - VerifyView for community verification
+  - CampaignsView with join/leave functionality
+  - Sheet/fullScreenCover navigation
+
+#### Landing Page ✅
+Complete marketing site built by subagent:
+
+- **URL:** http://10.10.10.24:3011
+- **Tech:** Next.js 14 + TypeScript + Tailwind CSS
+- **Port:** 3011 (registered in PORTS.md)
+
+Sections:
+1. Navigation with smooth scroll
+2. Hero with Kickstarter teaser
+3. Stats bar (100% Free, 1 min to scan, etc.)
+4. Problem section (3 pain points)
+5. Solution section (Scan → Track → Compare)
+6. Features (App vs MeterPi hardware)
+7. Pricing (4 tiers + referral rewards)
+8. Kickstarter teaser with backer benefits
+9. Email signup waitlist form
+10. Footer with links
+
+### Files Created
+```
+ios/MeterScience/Services/
+├── APIService.swift      # API client with all endpoints
+└── AuthManager.swift     # Auth state + LoginView
+
+ios/MeterScience/Views/
+├── ContentView.swift     # Main TabView + sub-views
+├── ProfileView.swift     # Stats, badges, account actions
+├── ReferralView.swift    # Referral system + share sheet
+├── SubscriptionView.swift # StoreKit 2 paywall
+├── CalibrationView.swift  # Meter setup wizard
+└── SmartScanView.swift   # Camera + Vision OCR
+
+web/
+├── app/
+│   ├── globals.css       # Tailwind + custom styles
+│   ├── layout.tsx        # Root layout with SEO
+│   └── page.tsx          # Complete landing page
+├── package.json          # Next.js config (port 3011)
+├── tailwind.config.ts    # Custom color scheme
+├── README.md             # Setup instructions
+├── DEPLOYMENT.md         # Full deployment guide
+└── start.sh              # Quick start script
+```
+
+### Services Running
+- **API:** http://10.10.10.24:3090
+- **Landing Page:** http://10.10.10.24:3011
+
+### Next Steps
+1. Build iOS app in Xcode and test on device
+2. Configure Formspree for email collection
+3. Add real images/screenshots to landing page
+4. Git commit all changes
+5. Consider TestFlight beta
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**
