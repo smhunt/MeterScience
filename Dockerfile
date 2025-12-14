@@ -89,7 +89,7 @@ RUN npm install -g \
     wrangler
 
 # Install Python packages globally (break system packages - we're dangerous)
-RUN pip3 install --break-system-packages \
+RUN pip3 install --break-system-packages --ignore-installed \
     # Web frameworks
     fastapi \
     uvicorn[standard] \
@@ -199,7 +199,7 @@ echo ""
 # Keep container running
 exec "$@"
 EOF
-chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
