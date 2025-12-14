@@ -2,7 +2,7 @@
 Readings API endpoints
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
 
@@ -102,7 +102,7 @@ async def create_reading(
     
     if prev_reading and reading.numeric_value and prev_reading.numeric_value:
         usage_since_last = reading.numeric_value - prev_reading.numeric_value
-        days_since_last = (datetime.utcnow() - prev_reading.captured_at).total_seconds() / 86400
+        days_since_last = (datetime.now(timezone.utc) - prev_reading.captured_at).total_seconds() / 86400
         
         # Flag anomalies
         if usage_since_last < 0:
@@ -142,13 +142,13 @@ async def create_reading(
     # Update user stats
     current_user.total_readings += 1
     current_user.xp += 10  # XP for reading
-    current_user.last_reading_date = datetime.utcnow()
+    current_user.last_reading_date = datetime.now(timezone.utc)
     
     # Update streak
     # TODO: Implement streak logic
     
     # Update meter
-    meter.last_read_at = datetime.utcnow()
+    meter.last_read_at = datetime.now(timezone.utc)
     if reading.normalized_value:
         samples = meter.sample_readings or []
         samples.append(reading.normalized_value)
@@ -333,8 +333,8 @@ async def create_hardware_reading(
     db.add(new_reading)
     
     # Update device status
-    device.last_reading_at = datetime.utcnow()
-    device.last_seen_at = datetime.utcnow()
+    device.last_reading_at = datetime.now(timezone.utc)
+    device.last_seen_at = datetime.now(timezone.utc)
     device.is_online = True
     
     await db.commit()
