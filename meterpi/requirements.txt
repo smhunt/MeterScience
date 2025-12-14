@@ -1,0 +1,23 @@
+# MeterPi - Raspberry Pi Meter Reader
+
+# Core
+flask==3.0.0
+flask-cors==4.0.0
+
+# OCR
+pytesseract==0.3.10
+opencv-python-headless==4.9.0.80
+numpy==1.26.3
+pillow==10.2.0
+
+# Database
+# sqlite3 is built-in
+
+# MQTT
+paho-mqtt==1.6.1
+
+# HTTP client
+requests==2.31.0
+
+# Testing
+pytest==7.4.4

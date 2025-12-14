@@ -1,0 +1,87 @@
+# MeterPi Home Assistant Integration
+# Add this to your configuration.yaml
+
+# Basic REST sensors
+sensor:
+  # Current meter reading
+  - platform: rest
+    name: "Electric Meter Reading"
+    resource: http://meterpi.local:5000/api/v1/readings/latest
+    value_template: "{{ value_json.numeric_value }}"
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    scan_interval: 60
+    json_attributes:
+      - confidence
+      - timestamp
+      - reading_id
+
+  # Statistics
+  - platform: rest
+    name: "Electric Meter Stats"
+    resource: http://meterpi.local:5000/api/v1/stats
+    value_template: "{{ value_json.average_daily_usage }}"
+    unit_of_measurement: "kWh/day"
+    scan_interval: 3600
+    json_attributes:
+      - total_readings
+      - first_reading
+      - latest_reading
+
+# Template sensors for derived values
+template:
+  - sensor:
+      - name: "Electric Meter Confidence"
+        state: "{{ state_attr('sensor.electric_meter_reading', 'confidence') | round(2) }}"
+        unit_of_measurement: "%"
+        icon: mdi:percent
+        
+      - name: "Electric Meter Last Update"
+        state: "{{ state_attr('sensor.electric_meter_reading', 'timestamp') }}"
+        device_class: timestamp
+
+# Energy dashboard configuration
+# Add to your energy dashboard in UI:
+# - sensor.electric_meter_reading as grid consumption
+
+# Automations
+automation:
+  # Alert on low confidence readings
+  - alias: "MeterPi Low Confidence Alert"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.electric_meter_confidence
+        below: 70
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "MeterPi Alert"
+          message: "Low confidence reading detected. Check camera alignment."
+          
+  # Daily usage notification
+  - alias: "Daily Usage Summary"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "Yesterday's Usage"
+          message: >
+            Electric: {{ states('sensor.electric_meter_stats') }} kWh/day average
+            
+# Lovelace card example
+# Add to your dashboard:
+# 
+# type: entities
+# title: MeterPi Electric
+# entities:
+#   - entity: sensor.electric_meter_reading
+#     name: Current Reading
+#   - entity: sensor.electric_meter_confidence
+#     name: OCR Confidence
+#   - entity: sensor.electric_meter_stats
+#     name: Daily Average
+#   - entity: sensor.electric_meter_last_update
+#     name: Last Update

@@ -1,0 +1,110 @@
+# MeterScience Full Stack Development Environment
+# Run: docker-compose up -d
+
+version: '3.9'
+
+services:
+  # Main development sandbox
+  sandbox:
+    build: .
+    container_name: meterscience-dev
+    privileged: true
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./:/workspace
+      - ./output:/output
+      - ~/.ssh:/root/.ssh:ro  # For git operations
+    ports:
+      - "3000:3000"   # Web/React
+      - "5000:5000"   # Flask/MeterPi API
+      - "8000:8000"   # FastAPI
+      - "8080:8080"   # Alt
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgresql://meterscience:meterscience@postgres:5432/meterscience
+      - REDIS_URL=redis://redis:6379
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - meterscience
+
+  # PostgreSQL with PostGIS
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: meterscience-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: meterscience
+      POSTGRES_PASSWORD: meterscience
+      POSTGRES_DB: meterscience
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - meterscience
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: meterscience-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - meterscience
+
+  # MinIO for S3-compatible object storage
+  minio:
+    image: minio/minio
+    container_name: meterscience-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: meterscience
+      MINIO_ROOT_PASSWORD: meterscience
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - meterscience
+
+  # Adminer for database management
+  adminer:
+    image: adminer
+    container_name: meterscience-adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    networks:
+      - meterscience
+
+  # Stripe CLI for webhook testing
+  stripe-cli:
+    image: stripe/stripe-cli
+    container_name: meterscience-stripe
+    command: listen --forward-to http://sandbox:8000/webhooks/stripe
+    environment:
+      - STRIPE_API_KEY=${STRIPE_SECRET_KEY}
+    networks:
+      - meterscience
+    profiles:
+      - stripe
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  meterscience:
+    driver: bridge

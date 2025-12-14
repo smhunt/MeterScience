@@ -1,0 +1,110 @@
+version: '3.9'
+
+services:
+  # Main development sandbox - DANGEROUS FULL PERMISSIONS
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meterscience-sandbox
+    hostname: meterscience
+    volumes:
+      # Mount workspace with full access
+      - ../:/workspace:rw
+      # Persist home directory for claude settings
+      - sandbox-home:/root
+      # SSH keys for git
+      - ~/.ssh:/root/.ssh:ro
+      # Docker socket for DinD if needed
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "3000:3000"   # React dev
+      - "5000:5000"   # MeterPi API
+      - "8000:8000"   # FastAPI
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/meterscience
+      - REDIS_URL=redis://redis:6379
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+    depends_on:
+      - db
+      - redis
+    networks:
+      - meterscience
+    # DANGEROUS: Full privileges
+    privileged: true
+    stdin_open: true
+    tty: true
+
+  # PostgreSQL with PostGIS
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: meterscience-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: meterscience
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - meterscience
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: meterscience-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - meterscience
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO for S3-compatible storage (meter images)
+  minio:
+    image: minio/minio
+    container_name: meterscience-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: meterscience
+      MINIO_ROOT_PASSWORD: meterscience123
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - meterscience
+
+  # Adminer for DB management
+  adminer:
+    image: adminer
+    container_name: meterscience-adminer
+    ports:
+      - "8080:8080"
+    networks:
+      - meterscience
+
+volumes:
+  sandbox-home:
+  postgres-data:
+  redis-data:
+  minio-data:
+
+networks:
+  meterscience:
+    driver: bridge
