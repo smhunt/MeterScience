@@ -232,6 +232,30 @@ class Campaign(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CampaignParticipant(Base):
+    __tablename__ = "campaign_participants"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    campaign_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("campaigns.id"), nullable=False)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+
+    # Participation stats
+    readings_submitted: Mapped[int] = mapped_column(Integer, default=0)
+    verified_readings: Mapped[int] = mapped_column(Integer, default=0)
+    xp_earned: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Status
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Timestamps
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    last_reading_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "user_id", name="unique_participant"),
+    )
+
+
 class Device(Base):
     __tablename__ = "devices"
     
