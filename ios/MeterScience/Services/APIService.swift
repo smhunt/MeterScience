@@ -232,7 +232,7 @@ struct AuthResponse: Decodable {
     let user: UserResponse
 }
 
-struct UserResponse: Decodable {
+struct UserResponse: Codable {
     let id: UUID
     let email: String?
     let displayName: String
@@ -251,7 +251,7 @@ struct UserResponse: Decodable {
     let createdAt: Date
 }
 
-struct BadgeResponse: Decodable {
+struct BadgeResponse: Codable {
     let id: String
     let name: String
     let description: String

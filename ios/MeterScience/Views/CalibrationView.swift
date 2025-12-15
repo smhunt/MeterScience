@@ -698,51 +698,6 @@ struct NavigationButtons: View {
     }
 }
 
-// MARK: - Extension for UserResponse Codable
-
-extension UserResponse: Encodable {
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encodeIfPresent(email, forKey: .email)
-        try container.encode(displayName, forKey: .displayName)
-        try container.encode(avatarEmoji, forKey: .avatarEmoji)
-        try container.encode(level, forKey: .level)
-        try container.encode(xp, forKey: .xp)
-        try container.encode(totalReadings, forKey: .totalReadings)
-        try container.encode(verifiedReadings, forKey: .verifiedReadings)
-        try container.encode(verificationsPerformed, forKey: .verificationsPerformed)
-        try container.encode(streakDays, forKey: .streakDays)
-        try container.encode(trustScore, forKey: .trustScore)
-        try container.encode(badges, forKey: .badges)
-        try container.encode(subscriptionTier, forKey: .subscriptionTier)
-        try container.encodeIfPresent(referralCode, forKey: .referralCode)
-        try container.encode(referralCount, forKey: .referralCount)
-        try container.encode(createdAt, forKey: .createdAt)
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, email, displayName, avatarEmoji, level, xp, totalReadings
-        case verifiedReadings, verificationsPerformed, streakDays, trustScore
-        case badges, subscriptionTier, referralCode, referralCount, createdAt
-    }
-}
-
-extension BadgeResponse: Encodable {
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(name, forKey: .name)
-        try container.encode(description, forKey: .description)
-        try container.encode(icon, forKey: .icon)
-        try container.encode(earnedAt, forKey: .earnedAt)
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id, name, description, icon, earnedAt
-    }
-}
-
 #Preview {
     CalibrationView()
 }

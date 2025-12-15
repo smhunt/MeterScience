@@ -168,7 +168,7 @@ class SubscriptionStore: ObservableObject {
         purchasedProductIDs = purchased
     }
 
-    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+    private nonisolated func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {
         case .unverified:
             throw StoreError.failedVerification
@@ -310,7 +310,7 @@ struct TierCard: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("$\(tier.monthlyPrice, specifier: "%.2f")")
+                        Text("$\(NSDecimalNumber(decimal: tier.monthlyPrice).doubleValue, specifier: "%.2f")")
                             .font(.title2.bold())
                         Text("/month")
                             .font(.caption)

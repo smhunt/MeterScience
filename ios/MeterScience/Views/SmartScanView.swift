@@ -65,7 +65,7 @@ struct SmartScanView: View {
 // MARK: - View Model
 
 @MainActor
-class SmartScanViewModel: ObservableObject {
+class SmartScanViewModel: NSObject, ObservableObject {
     let meter: MeterResponse
     let session = AVCaptureSession()
 
@@ -93,6 +93,7 @@ class SmartScanViewModel: ObservableObject {
 
     init(meter: MeterResponse) {
         self.meter = meter
+        super.init()
     }
 
     func startSession() {
@@ -249,15 +250,14 @@ class SmartScanViewModel: ObservableObject {
 
 extension SmartScanViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // Throttle processing
-        let now = Date()
-        guard now.timeIntervalSince(lastProcessedTime) > 0.5 else { return }
-
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        let now = Date()
 
         Task { @MainActor in
+            // Throttle processing
+            guard now.timeIntervalSince(lastProcessedTime) > 0.5 else { return }
             guard scanState == .scanning else { return }
             lastProcessedTime = now
             processImage(ciImage)
