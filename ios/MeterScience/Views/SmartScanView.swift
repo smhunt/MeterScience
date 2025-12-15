@@ -48,15 +48,29 @@ struct SmartScanView: View {
                     }
                 }
             } else {
-                // Camera Preview with explicit sizing
-                GeometryReader { geo in
-                    CameraPreview(session: viewModel.session)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .onAppear {
-                            print("[SmartScanView] CameraPreview appeared, size: \(geo.size)")
+                // Show captured image or capture prompt
+                ZStack {
+                    Color.black.ignoresSafeArea()
+
+                    if let image = viewModel.capturedImage {
+                        // Show captured photo
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .ignoresSafeArea()
+                    } else {
+                        // Prompt to take photo
+                        VStack(spacing: 24) {
+                            Image(systemName: "camera.viewfinder")
+                                .font(.system(size: 80))
+                                .foregroundStyle(.white.opacity(0.6))
+
+                            Text("Tap to capture your meter reading")
+                                .font(.headline)
+                                .foregroundStyle(.white.opacity(0.8))
                         }
+                    }
                 }
-                .ignoresSafeArea()
 
                 // Overlay
                 VStack {
@@ -65,19 +79,41 @@ struct SmartScanView: View {
 
                     Spacer()
 
-                    // Scanning Guide
-                    if viewModel.scanState == .scanning {
-                        ScanningGuide(viewModel: viewModel)
-                    }
-
-                    // Result Card
+                    // Result Card (after capture)
                     if viewModel.scanState == .detected || viewModel.scanState == .confirmed {
                         ResultCard(viewModel: viewModel, dismiss: dismiss)
                     }
 
-                    // Bottom Controls
+                    // Capture Button (before capture)
                     if viewModel.scanState == .scanning {
-                        BottomControls(viewModel: viewModel)
+                        VStack(spacing: 16) {
+                            if viewModel.capturedImage == nil {
+                                Text("Point at your \(viewModel.meter.meterType) meter")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.white.opacity(0.8))
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Capsule())
+                            }
+
+                            Button {
+                                viewModel.capturePhoto()
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(.white)
+                                        .frame(width: 72, height: 72)
+                                    Circle()
+                                        .stroke(.white, lineWidth: 4)
+                                        .frame(width: 82, height: 82)
+                                    Image(systemName: "camera.fill")
+                                        .font(.title)
+                                        .foregroundStyle(.black)
+                                }
+                            }
+                            .padding(.bottom, 40)
+                        }
                     }
                 }
 
