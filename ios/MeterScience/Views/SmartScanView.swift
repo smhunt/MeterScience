@@ -517,37 +517,36 @@ struct CameraPreview: UIViewRepresentable {
 }
 
 class CameraPreviewUIView: UIView {
-    private var previewLayer: AVCaptureVideoPreviewLayer?
+    override class var layerClass: AnyClass {
+        return AVCaptureVideoPreviewLayer.self
+    }
+
+    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
+        return layer as! AVCaptureVideoPreviewLayer
+    }
 
     init(session: AVCaptureSession) {
         super.init(frame: .zero)
         backgroundColor = .black
-        setupPreviewLayer(session: session)
+        videoPreviewLayer.session = session
+        videoPreviewLayer.videoGravity = .resizeAspectFill
+        print("[CameraPreviewUIView] init with session running: \(session.isRunning)")
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func setupPreviewLayer(session: AVCaptureSession) {
-        print("[CameraPreviewUIView] setupPreviewLayer called, session running: \(session.isRunning)")
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.backgroundColor = UIColor.black.cgColor
-        layer.addSublayer(previewLayer)
-        self.previewLayer = previewLayer
-    }
-
     func updateSession(_ session: AVCaptureSession) {
-        if previewLayer?.session !== session {
-            previewLayer?.session = session
+        if videoPreviewLayer.session !== session {
+            videoPreviewLayer.session = session
+            print("[CameraPreviewUIView] Updated session")
         }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        print("[CameraPreviewUIView] layoutSubviews called, bounds: \(bounds)")
-        previewLayer?.frame = bounds
+        print("[CameraPreviewUIView] layoutSubviews bounds: \(bounds)")
     }
 }
 
