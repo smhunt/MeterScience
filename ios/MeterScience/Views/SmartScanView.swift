@@ -411,6 +411,11 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
 extension SmartScanViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
     nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // TEMPORARILY DISABLED - testing camera preview
+        // Auto-capture disabled - use manual capture button only
+        return
+
+        /*
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
@@ -423,6 +428,7 @@ extension SmartScanViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
             lastProcessedTime = now
             processImage(ciImage)
         }
+        */
     }
 }
 
