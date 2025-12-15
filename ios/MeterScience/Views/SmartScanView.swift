@@ -48,13 +48,15 @@ struct SmartScanView: View {
                     }
                 }
             } else {
-                // Camera Preview
-                CameraPreview(session: viewModel.session)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea()
-                    .onAppear {
-                        print("[SmartScanView] CameraPreview appeared")
-                    }
+                // Camera Preview with explicit sizing
+                GeometryReader { geo in
+                    CameraPreview(session: viewModel.session)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .onAppear {
+                            print("[SmartScanView] CameraPreview appeared, size: \(geo.size)")
+                        }
+                }
+                .ignoresSafeArea()
 
                 // Overlay
                 VStack {
