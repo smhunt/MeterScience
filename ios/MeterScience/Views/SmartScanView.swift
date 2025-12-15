@@ -516,32 +516,49 @@ struct RecognizedReading: Identifiable {
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
-    func makeUIView(context: Context) -> PreviewView {
-        print("[CameraPreview] makeUIView called, session.isRunning: \(session.isRunning)")
-        let view = PreviewView()
-        view.backgroundColor = .red  // DEBUG: Should see red if view is visible
-        view.videoPreviewLayer.session = session
-        view.videoPreviewLayer.videoGravity = .resizeAspectFill
-        return view
+    func makeUIView(context: Context) -> VideoPreviewView {
+        print("[CameraPreview] makeUIView called")
+        return VideoPreviewView(session: session)
     }
 
-    func updateUIView(_ uiView: PreviewView, context: Context) {
-        print("[CameraPreview] updateUIView bounds: \(uiView.bounds), session.isRunning: \(session.isRunning)")
+    func updateUIView(_ uiView: VideoPreviewView, context: Context) {
+        // Session is already set in init
     }
 }
 
-class PreviewView: UIView {
-    override class var layerClass: AnyClass {
-        AVCaptureVideoPreviewLayer.self
+class VideoPreviewView: UIView {
+    private let previewLayer = AVCaptureVideoPreviewLayer()
+
+    init(session: AVCaptureSession) {
+        super.init(frame: .zero)
+
+        backgroundColor = .black
+
+        // Configure preview layer
+        previewLayer.session = session
+        previewLayer.videoGravity = .resizeAspectFill
+
+        // Use autoresizing so layer resizes with view
+        previewLayer.frame = bounds
+        previewLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+
+        layer.addSublayer(previewLayer)
+
+        print("[VideoPreviewView] init, session.isRunning: \(session.isRunning)")
     }
 
-    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
-        layer as! AVCaptureVideoPreviewLayer
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        print("[PreviewView] layoutSubviews bounds: \(bounds)")
+        // Ensure preview layer matches bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        previewLayer.frame = bounds
+        CATransaction.commit()
+        print("[VideoPreviewView] layoutSubviews: \(bounds)")
     }
 }
 
