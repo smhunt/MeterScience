@@ -50,7 +50,11 @@ struct SmartScanView: View {
             } else {
                 // Camera Preview
                 CameraPreview(session: viewModel.session)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
+                    .onAppear {
+                        print("[SmartScanView] CameraPreview appeared")
+                    }
 
                 // Overlay
                 VStack {
@@ -510,49 +514,32 @@ struct RecognizedReading: Identifiable {
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
-    func makeUIView(context: Context) -> CameraPreviewUIView {
-        print("[CameraPreview] makeUIView called")
-        let view = CameraPreviewUIView(session: session)
+    func makeUIView(context: Context) -> PreviewView {
+        print("[CameraPreview] makeUIView called, session.isRunning: \(session.isRunning)")
+        let view = PreviewView()
+        view.backgroundColor = .red  // DEBUG: Should see red if view is visible
+        view.videoPreviewLayer.session = session
+        view.videoPreviewLayer.videoGravity = .resizeAspectFill
         return view
     }
 
-    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
-        print("[CameraPreview] updateUIView called, bounds: \(uiView.bounds)")
-        uiView.updateSession(session)
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+        print("[CameraPreview] updateUIView bounds: \(uiView.bounds), session.isRunning: \(session.isRunning)")
     }
 }
 
-class CameraPreviewUIView: UIView {
+class PreviewView: UIView {
     override class var layerClass: AnyClass {
-        return AVCaptureVideoPreviewLayer.self
+        AVCaptureVideoPreviewLayer.self
     }
 
     var videoPreviewLayer: AVCaptureVideoPreviewLayer {
-        return layer as! AVCaptureVideoPreviewLayer
-    }
-
-    init(session: AVCaptureSession) {
-        super.init(frame: .zero)
-        backgroundColor = .black
-        videoPreviewLayer.session = session
-        videoPreviewLayer.videoGravity = .resizeAspectFill
-        print("[CameraPreviewUIView] init with session running: \(session.isRunning)")
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func updateSession(_ session: AVCaptureSession) {
-        if videoPreviewLayer.session !== session {
-            videoPreviewLayer.session = session
-            print("[CameraPreviewUIView] Updated session")
-        }
+        layer as! AVCaptureVideoPreviewLayer
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        print("[CameraPreviewUIView] layoutSubviews bounds: \(bounds)")
+        print("[PreviewView] layoutSubviews bounds: \(bounds)")
     }
 }
 
