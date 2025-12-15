@@ -12,43 +12,48 @@ struct SmartScanView: View {
 
     var body: some View {
         ZStack {
-            // Camera Preview
-            CameraPreview(session: viewModel.session)
-                .ignoresSafeArea()
-
-            // Overlay
-            VStack {
-                // Top Bar
-                TopBar(viewModel: viewModel, dismiss: dismiss)
-
-                Spacer()
-
-                // Scanning Guide
-                if viewModel.scanState == .scanning {
-                    ScanningGuide(viewModel: viewModel)
-                }
-
-                // Result Card
-                if viewModel.scanState == .detected || viewModel.scanState == .confirmed {
-                    ResultCard(viewModel: viewModel, dismiss: dismiss)
-                }
-
-                // Bottom Controls
-                if viewModel.scanState == .scanning {
-                    BottomControls(viewModel: viewModel)
-                }
-            }
-
-            // Loading Overlay
-            if viewModel.isSubmitting {
-                Color.black.opacity(0.5)
+            if viewModel.cameraUnavailable {
+                // Fallback UI when camera isn't available (e.g., Simulator)
+                CameraUnavailableView(viewModel: viewModel, dismiss: dismiss)
+            } else {
+                // Camera Preview
+                CameraPreview(session: viewModel.session)
                     .ignoresSafeArea()
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(.white)
+
+                // Overlay
+                VStack {
+                    // Top Bar
+                    TopBar(viewModel: viewModel, dismiss: dismiss)
+
+                    Spacer()
+
+                    // Scanning Guide
+                    if viewModel.scanState == .scanning {
+                        ScanningGuide(viewModel: viewModel)
+                    }
+
+                    // Result Card
+                    if viewModel.scanState == .detected || viewModel.scanState == .confirmed {
+                        ResultCard(viewModel: viewModel, dismiss: dismiss)
+                    }
+
+                    // Bottom Controls
+                    if viewModel.scanState == .scanning {
+                        BottomControls(viewModel: viewModel)
+                    }
+                }
+
+                // Loading Overlay
+                if viewModel.isSubmitting {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .tint(.white)
+                }
             }
         }
-        .alert("Error", isPresented: .constant(viewModel.errorMessage != nil)) {
+        .alert("Error", isPresented: $viewModel.showError) {
             Button("OK") { viewModel.errorMessage = nil }
         } message: {
             Text(viewModel.errorMessage ?? "")
@@ -75,8 +80,11 @@ class SmartScanViewModel: NSObject, ObservableObject {
     @Published var allCandidates: [RecognizedReading] = []
     @Published var isFlashOn = false
     @Published var errorMessage: String?
+    @Published var showError = false
     @Published var isSubmitting = false
     @Published var capturedImage: UIImage?
+    @Published var cameraUnavailable = false
+    @Published var manualReading = ""
 
     private var captureOutput: AVCapturePhotoOutput?
     private var videoOutput: AVCaptureVideoDataOutput?
@@ -108,7 +116,7 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
     private func setupCamera() async {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-            errorMessage = "Camera not available"
+            cameraUnavailable = true
             return
         }
 
@@ -199,8 +207,36 @@ class SmartScanViewModel: NSObject, ObservableObject {
             scanState = .confirmed
         } catch let error as APIError {
             errorMessage = error.localizedDescription
+            showError = true
         } catch {
             errorMessage = error.localizedDescription
+            showError = true
+        }
+    }
+
+    func submitManualReading() async {
+        guard !manualReading.isEmpty else { return }
+
+        isSubmitting = true
+        defer { isSubmitting = false }
+
+        do {
+            let normalizedValue = manualReading.filter { $0.isNumber || $0 == "." }
+            _ = try await APIService.shared.createReading(
+                meterId: meter.id,
+                rawValue: manualReading,
+                normalizedValue: normalizedValue,
+                confidence: 1.0,
+                source: "manual"
+            )
+            scanState = .confirmed
+            detectedReading = manualReading
+        } catch let error as APIError {
+            errorMessage = error.localizedDescription
+            showError = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
         }
     }
 
@@ -690,6 +726,130 @@ struct BottomControls: View {
             }
         }
         .padding(.bottom, 40)
+    }
+}
+
+// MARK: - Camera Unavailable View
+
+struct CameraUnavailableView: View {
+    @ObservedObject var viewModel: SmartScanViewModel
+    let dismiss: DismissAction
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            // Icon
+            Image(systemName: "camera.fill")
+                .font(.system(size: 64))
+                .foregroundStyle(.secondary)
+
+            Text("Camera Not Available")
+                .font(.title2.bold())
+
+            Text("Enter your meter reading manually below.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            // Meter Info
+            HStack(spacing: 8) {
+                Image(systemName: meterIcon)
+                    .foregroundStyle(meterColor)
+                Text(viewModel.meter.name)
+                    .font(.headline)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(meterColor.opacity(0.1))
+            .clipShape(Capsule())
+
+            // Manual Entry
+            VStack(spacing: 16) {
+                TextField("Enter reading (e.g., 123456)", text: $viewModel.manualReading)
+                    .keyboardType(.numberPad)
+                    .font(.title2.monospacedDigit())
+                    .multilineTextAlignment(.center)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                if viewModel.scanState == .confirmed {
+                    // Success State
+                    VStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.green)
+
+                        Text("Reading Saved!")
+                            .font(.headline)
+
+                        Text("+10 XP")
+                            .font(.title3.bold())
+                            .foregroundStyle(.blue)
+                    }
+                    .padding()
+                }
+
+                HStack(spacing: 12) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        Task {
+                            await viewModel.submitManualReading()
+                        }
+                    } label: {
+                        if viewModel.isSubmitting {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                        } else if viewModel.scanState == .confirmed {
+                            Text("Done")
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Text("Save Reading")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(meterColor)
+                    .disabled(viewModel.manualReading.isEmpty || viewModel.isSubmitting)
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: .black.opacity(0.1), radius: 10)
+
+            Spacer()
+        }
+        .padding()
+        .background(Color(.systemGroupedBackground))
+    }
+
+    var meterIcon: String {
+        switch viewModel.meter.meterType.lowercased() {
+        case "electric": return "bolt.fill"
+        case "gas": return "flame.fill"
+        case "water": return "drop.fill"
+        case "solar": return "sun.max.fill"
+        default: return "gauge"
+        }
+    }
+
+    var meterColor: Color {
+        switch viewModel.meter.meterType.lowercased() {
+        case "electric": return .yellow
+        case "gas": return .orange
+        case "water": return .blue
+        case "solar": return .green
+        default: return .gray
+        }
     }
 }
 

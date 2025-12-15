@@ -12,7 +12,24 @@ actor APIService {
     private init() {
         decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
-        decoder.dateDecodingStrategy = .iso8601
+
+        // Custom ISO8601 formatter that handles fractional seconds
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            if let date = isoFormatter.date(from: dateString) {
+                return date
+            }
+            // Fallback for dates without fractional seconds
+            let fallbackFormatter = ISO8601DateFormatter()
+            fallbackFormatter.formatOptions = [.withInternetDateTime]
+            if let date = fallbackFormatter.date(from: dateString) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid date: \(dateString)")
+        }
 
         encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
