@@ -6,6 +6,7 @@ struct SmartScanView: View {
     let meter: MeterResponse
     @StateObject private var viewModel: SmartScanViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var showingCamera = false
 
     init(meter: MeterResponse) {
         self.meter = meter
@@ -14,117 +15,109 @@ struct SmartScanView: View {
 
     var body: some View {
         ZStack {
-            if viewModel.cameraUnavailable {
-                // Fallback UI when camera isn't available (e.g., Simulator)
-                CameraUnavailableView(viewModel: viewModel, dismiss: dismiss)
-            } else if !viewModel.cameraReady {
-                // Loading state while camera initializes
-                ZStack {
-                    Color.black.ignoresSafeArea()
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .tint(.white)
-                        Text("Starting camera...")
-                            .foregroundStyle(.white)
-                    }
-                    // Close button
-                    VStack {
-                        HStack {
-                            Button {
-                                dismiss()
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.title2)
-                                    .foregroundStyle(.white)
-                                    .padding(12)
-                                    .background(.white.opacity(0.3))
-                                    .clipShape(Circle())
-                            }
-                            Spacer()
-                        }
-                        .padding()
-                        Spacer()
-                    }
-                }
+            Color.black.ignoresSafeArea()
+
+            if let image = viewModel.capturedImage {
+                // Show captured photo
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
             } else {
-                // Show captured image or capture prompt
-                ZStack {
-                    Color.black.ignoresSafeArea()
+                // Prompt to take photo
+                VStack(spacing: 24) {
+                    Image(systemName: "camera.viewfinder")
+                        .font(.system(size: 80))
+                        .foregroundStyle(.white.opacity(0.6))
 
-                    if let image = viewModel.capturedImage {
-                        // Show captured photo
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .ignoresSafeArea()
-                    } else {
-                        // Prompt to take photo
-                        VStack(spacing: 24) {
-                            Image(systemName: "camera.viewfinder")
-                                .font(.system(size: 80))
-                                .foregroundStyle(.white.opacity(0.6))
-
-                            Text("Tap to capture your meter reading")
-                                .font(.headline)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-                    }
+                    Text("Tap to capture your meter reading")
+                        .font(.headline)
+                        .foregroundStyle(.white.opacity(0.8))
                 }
+            }
 
-                // Overlay
-                VStack {
-                    // Top Bar
-                    TopBar(viewModel: viewModel, dismiss: dismiss)
+            // Overlay
+            VStack {
+                // Top Bar
+                HStack {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .frame(width: 44, height: 44)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                    }
 
                     Spacer()
 
-                    // Result Card (after capture)
-                    if viewModel.scanState == .detected || viewModel.scanState == .confirmed {
-                        ResultCard(viewModel: viewModel, dismiss: dismiss)
+                    VStack(spacing: 2) {
+                        Text(meter.name)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text(meter.meterType.capitalized)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
 
-                    // Capture Button (before capture)
-                    if viewModel.scanState == .scanning {
-                        VStack(spacing: 16) {
-                            if viewModel.capturedImage == nil {
-                                Text("Point at your \(viewModel.meter.meterType) meter")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.white.opacity(0.8))
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Capsule())
-                            }
+                    Spacer()
 
-                            Button {
-                                viewModel.capturePhoto()
-                            } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(.white)
-                                        .frame(width: 72, height: 72)
-                                    Circle()
-                                        .stroke(.white, lineWidth: 4)
-                                        .frame(width: 82, height: 82)
-                                    Image(systemName: "camera.fill")
-                                        .font(.title)
-                                        .foregroundStyle(.black)
-                                }
-                            }
-                            .padding(.bottom, 40)
-                        }
-                    }
+                    // Placeholder for symmetry
+                    Color.clear
+                        .frame(width: 44, height: 44)
+                }
+                .padding()
+
+                Spacer()
+
+                // Result Card (after capture + OCR)
+                if viewModel.scanState == .detected || viewModel.scanState == .confirmed {
+                    ResultCard(viewModel: viewModel, dismiss: dismiss)
                 }
 
-                // Loading Overlay
-                if viewModel.isSubmitting {
-                    Color.black.opacity(0.5)
-                        .ignoresSafeArea()
+                // Capture Button
+                if viewModel.scanState == .scanning {
+                    Button {
+                        showingCamera = true
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(.white)
+                                .frame(width: 72, height: 72)
+                            Circle()
+                                .stroke(.white, lineWidth: 4)
+                                .frame(width: 82, height: 82)
+                            Image(systemName: "camera.fill")
+                                .font(.title)
+                                .foregroundStyle(.black)
+                        }
+                    }
+                    .padding(.bottom, 40)
+                }
+            }
+
+            // Loading Overlay
+            if viewModel.isProcessing {
+                Color.black.opacity(0.7)
+                    .ignoresSafeArea()
+                VStack(spacing: 16) {
                     ProgressView()
                         .scaleEffect(1.5)
                         .tint(.white)
+                    Text("Processing...")
+                        .foregroundStyle(.white)
                 }
+            }
+        }
+        .sheet(isPresented: $showingCamera) {
+            ImagePicker(image: $viewModel.capturedImage) {
+                // Photo was taken - run OCR
+                viewModel.processCapture()
             }
         }
         .alert("Error", isPresented: $viewModel.showError) {
@@ -132,11 +125,46 @@ struct SmartScanView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
-        .onAppear {
-            viewModel.startSession()
+    }
+}
+
+// MARK: - Image Picker (System Camera)
+
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    @Environment(\.dismiss) private var dismiss
+    var onCapture: () -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePicker
+
+        init(_ parent: ImagePicker) {
+            self.parent = parent
         }
-        .onDisappear {
-            viewModel.stopSession()
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let uiImage = info[.originalImage] as? UIImage {
+                parent.image = uiImage
+                parent.dismiss()
+                parent.onCapture()
+            }
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }
@@ -146,31 +174,19 @@ struct SmartScanView: View {
 @MainActor
 class SmartScanViewModel: NSObject, ObservableObject {
     let meter: MeterResponse
-    let session = AVCaptureSession()
 
     @Published var scanState: ScanState = .scanning
     @Published var detectedReading = ""
     @Published var confidence: Float = 0
     @Published var allCandidates: [RecognizedReading] = []
-    @Published var isFlashOn = false
     @Published var errorMessage: String?
     @Published var showError = false
     @Published var isSubmitting = false
+    @Published var isProcessing = false
     @Published var capturedImage: UIImage?
-    @Published var cameraUnavailable = false
-    @Published var cameraPermissionDenied = false
-    @Published var cameraReady = false
     @Published var manualReading = ""
 
-    private var captureOutput: AVCapturePhotoOutput?
-    private var videoOutput: AVCaptureVideoDataOutput?
     private let textRecognizer = TextRecognizer()
-
-    private var processingFrame = false
-    private var lastProcessedTime = Date()
-    private var sessionStartTime = Date()
-    private let minimumScanTime: TimeInterval = 2.0  // Wait at least 2 seconds before auto-detecting
-    private let minimumAutoConfidence: Float = 0.85  // Only auto-detect with high confidence
 
     enum ScanState {
         case scanning
@@ -184,138 +200,19 @@ class SmartScanViewModel: NSObject, ObservableObject {
         print("[SmartScanVM] init for meter: \(meter.name)")
     }
 
-    func startSession() {
-        print("[SmartScanVM] startSession called")
+    func processCapture() {
+        guard let image = capturedImage else { return }
+        print("[SmartScanVM] processCapture called")
+
+        isProcessing = true
+
         Task {
-            await setupCamera()
-        }
-    }
-
-    func stopSession() {
-        print("[SmartScanVM] stopSession called")
-        session.stopRunning()
-    }
-
-    private func setupCamera() async {
-        print("[SmartScanVM] setupCamera started")
-        // Check camera permission
-        let status = AVCaptureDevice.authorizationStatus(for: .video)
-        print("[SmartScanVM] Camera permission status: \(status.rawValue)")
-
-        switch status {
-        case .notDetermined:
-            print("[SmartScanVM] Requesting camera permission...")
-            let granted = await AVCaptureDevice.requestAccess(for: .video)
-            print("[SmartScanVM] Camera permission granted: \(granted)")
-            if !granted {
-                cameraPermissionDenied = true
-                cameraUnavailable = true
-                return
+            if let cgImage = image.cgImage {
+                let ciImage = CIImage(cgImage: cgImage)
+                await processImageAsync(ciImage, fromCapture: true)
             }
-        case .denied, .restricted:
-            print("[SmartScanVM] Camera permission denied or restricted")
-            cameraPermissionDenied = true
-            cameraUnavailable = true
-            return
-        case .authorized:
-            print("[SmartScanVM] Camera permission authorized")
-            break
-        @unknown default:
-            break
+            isProcessing = false
         }
-
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-            print("[SmartScanVM] No camera device available")
-            cameraUnavailable = true
-            return
-        }
-        print("[SmartScanVM] Camera device found: \(device.localizedName)")
-
-        do {
-            let input = try AVCaptureDeviceInput(device: device)
-            print("[SmartScanVM] Created camera input")
-
-            session.beginConfiguration()
-            print("[SmartScanVM] Session configuration started")
-
-            if session.canAddInput(input) {
-                session.addInput(input)
-                print("[SmartScanVM] Added camera input to session")
-            }
-
-            // Photo output for capturing
-            let photoOutput = AVCapturePhotoOutput()
-            if session.canAddOutput(photoOutput) {
-                session.addOutput(photoOutput)
-                self.captureOutput = photoOutput
-                print("[SmartScanVM] Added photo output to session")
-            }
-
-            // Video output for live OCR
-            let videoOutput = AVCaptureVideoDataOutput()
-            videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "VideoQueue"))
-            if session.canAddOutput(videoOutput) {
-                session.addOutput(videoOutput)
-                self.videoOutput = videoOutput
-                print("[SmartScanVM] Added video output to session")
-            }
-
-            session.commitConfiguration()
-            print("[SmartScanVM] Session configuration committed")
-
-            // Start camera on background thread and wait for it to start
-            await withCheckedContinuation { continuation in
-                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                    guard let self = self else {
-                        continuation.resume()
-                        return
-                    }
-                    print("[SmartScanVM] Starting camera session...")
-                    self.session.startRunning()
-                    print("[SmartScanVM] Camera session started, isRunning: \(self.session.isRunning)")
-                    continuation.resume()
-                }
-            }
-
-            // Now set cameraReady on main thread
-            print("[SmartScanVM] Setting cameraReady = true")
-            sessionStartTime = Date()
-            cameraReady = true
-        } catch {
-            print("[SmartScanVM] Camera setup error: \(error)")
-            errorMessage = "Camera setup failed: \(error.localizedDescription)"
-            showError = true
-            cameraUnavailable = true
-        }
-    }
-
-    func toggleFlash() {
-        guard let device = AVCaptureDevice.default(for: .video),
-              device.hasTorch else { return }
-
-        do {
-            try device.lockForConfiguration()
-            device.torchMode = isFlashOn ? .off : .on
-            isFlashOn.toggle()
-            device.unlockForConfiguration()
-        } catch {
-            print("Flash toggle failed: \(error)")
-        }
-    }
-
-    func capturePhoto() {
-        guard let captureOutput = captureOutput else { return }
-
-        let settings = AVCapturePhotoSettings()
-        if let photoOutputConnection = captureOutput.connection(with: .video) {
-            photoOutputConnection.videoOrientation = .portrait
-        }
-
-        captureOutput.capturePhoto(with: settings, delegate: self)
-    }
-
-    func confirmReading() {
-        scanState = .confirmed
     }
 
     func retryScanning() {
@@ -449,50 +346,6 @@ class SmartScanViewModel: NSObject, ObservableObject {
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
-
-extension SmartScanViewModel: AVCaptureVideoDataOutputSampleBufferDelegate {
-    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // TEMPORARILY DISABLED - testing camera preview
-        // Auto-capture disabled - use manual capture button only
-        return
-
-        /*
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let now = Date()
-
-        Task { @MainActor in
-            // Throttle processing
-            guard now.timeIntervalSince(lastProcessedTime) > 0.5 else { return }
-            guard scanState == .scanning else { return }
-            lastProcessedTime = now
-            processImage(ciImage)
-        }
-        */
-    }
-}
-
-// MARK: - AVCapturePhotoCaptureDelegate
-
-extension SmartScanViewModel: AVCapturePhotoCaptureDelegate {
-    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        guard let data = photo.fileDataRepresentation(),
-              let image = UIImage(data: data) else { return }
-
-        Task { @MainActor in
-            self.capturedImage = image
-
-            // Run OCR on captured image
-            if let cgImage = image.cgImage {
-                let ciImage = CIImage(cgImage: cgImage)
-                await self.processImageAsync(ciImage, fromCapture: true)
-            }
-        }
-    }
-}
-
 // MARK: - Text Recognizer
 
 actor TextRecognizer {
@@ -547,58 +400,7 @@ struct RecognizedReading: Identifiable {
     let boundingBox: CGRect
 }
 
-// MARK: - Camera Preview
-
-struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
-
-    func makeUIView(context: Context) -> VideoPreviewView {
-        print("[CameraPreview] makeUIView")
-        let view = VideoPreviewView()
-        return view
-    }
-
-    func updateUIView(_ uiView: VideoPreviewView, context: Context) {
-        print("[CameraPreview] updateUIView, bounds: \(uiView.bounds), session.isRunning: \(session.isRunning)")
-        // Set session in updateUIView when view has proper bounds
-        if uiView.bounds.size != .zero {
-            uiView.setSession(session)
-        }
-    }
-}
-
-class VideoPreviewView: UIView {
-    private let previewLayer = AVCaptureVideoPreviewLayer()
-    private var sessionSet = false
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .black
-        previewLayer.videoGravity = .resizeAspectFill
-        layer.addSublayer(previewLayer)
-        print("[VideoPreviewView] init")
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func setSession(_ session: AVCaptureSession) {
-        guard !sessionSet else { return }
-        sessionSet = true
-        previewLayer.session = session
-        previewLayer.frame = bounds
-        print("[VideoPreviewView] setSession, isRunning: \(session.isRunning), bounds: \(bounds)")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        previewLayer.frame = bounds
-        print("[VideoPreviewView] layoutSubviews: \(bounds)")
-    }
-}
-
-// MARK: - Top Bar
+// MARK: - Top Bar (unused - kept for reference)
 
 struct TopBar: View {
     @ObservedObject var viewModel: SmartScanViewModel
