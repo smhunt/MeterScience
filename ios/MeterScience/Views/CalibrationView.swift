@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 struct CalibrationView: View {
     @StateObject private var viewModel = CalibrationViewModel()
@@ -37,6 +38,7 @@ struct CalibrationView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        viewModel.stopCamera()
                         dismiss()
                     }
                 }
@@ -47,13 +49,16 @@ struct CalibrationView: View {
                 Text(viewModel.errorMessage ?? "")
             }
         }
+        .onDisappear {
+            viewModel.stopCamera()
+        }
     }
 }
 
 // MARK: - View Model
 
 @MainActor
-class CalibrationViewModel: ObservableObject {
+class CalibrationViewModel: NSObject, ObservableObject {
     @Published var currentStep = 1
     @Published var meterType: MeterType = .electric
     @Published var meterName = ""
@@ -64,6 +69,21 @@ class CalibrationViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var createdMeter: MeterResponse?
+
+    // Camera state
+    @Published var cameraPermissionStatus: AVAuthorizationStatus = .notDetermined
+    @Published var isCameraReady = false
+    @Published var capturedImage: UIImage?
+    @Published var isCapturing = false
+    @Published var useCamera = true  // Toggle between camera and manual entry
+
+    let cameraSession = AVCaptureSession()
+    private var photoOutput: AVCapturePhotoOutput?
+
+    override init() {
+        super.init()
+        print("[CalibrationVM] init")
+    }
 
     var canProceed: Bool {
         switch currentStep {
@@ -78,18 +98,141 @@ class CalibrationViewModel: ObservableObject {
     var isLastStep: Bool { currentStep == 4 }
 
     func nextStep() {
+        print("[CalibrationVM] nextStep from \(currentStep)")
         if currentStep < 4 {
             currentStep += 1
+            // Start camera when entering step 3
+            if currentStep == 3 && useCamera {
+                print("[CalibrationVM] Entering step 3, starting camera setup")
+                startCamera()
+            }
         }
     }
 
     func previousStep() {
+        print("[CalibrationVM] previousStep from \(currentStep)")
         if currentStep > 1 {
+            // Stop camera when leaving step 3
+            if currentStep == 3 {
+                print("[CalibrationVM] Leaving step 3, stopping camera")
+                stopCamera()
+            }
             currentStep -= 1
         }
     }
 
+    // MARK: - Camera Methods
+
+    func checkCameraPermission() {
+        cameraPermissionStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        print("[CalibrationVM] Camera permission status: \(cameraPermissionStatus.rawValue)")
+    }
+
+    func requestCameraPermission() async {
+        print("[CalibrationVM] Requesting camera permission...")
+        let granted = await AVCaptureDevice.requestAccess(for: .video)
+        print("[CalibrationVM] Camera permission granted: \(granted)")
+        cameraPermissionStatus = granted ? .authorized : .denied
+        if granted {
+            startCamera()
+        }
+    }
+
+    func startCamera() {
+        print("[CalibrationVM] startCamera called")
+        checkCameraPermission()
+
+        guard cameraPermissionStatus == .authorized else {
+            print("[CalibrationVM] Camera not authorized, status: \(cameraPermissionStatus.rawValue)")
+            return
+        }
+
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+
+            print("[CalibrationVM] Setting up camera on background thread")
+
+            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                print("[CalibrationVM] No camera device found!")
+                return
+            }
+            print("[CalibrationVM] Camera device found: \(device.localizedName)")
+
+            do {
+                let input = try AVCaptureDeviceInput(device: device)
+
+                self.cameraSession.beginConfiguration()
+
+                // Remove existing inputs
+                for input in self.cameraSession.inputs {
+                    self.cameraSession.removeInput(input)
+                }
+
+                if self.cameraSession.canAddInput(input) {
+                    self.cameraSession.addInput(input)
+                    print("[CalibrationVM] Added camera input")
+                }
+
+                let photoOutput = AVCapturePhotoOutput()
+
+                // Remove existing outputs
+                for output in self.cameraSession.outputs {
+                    self.cameraSession.removeOutput(output)
+                }
+
+                if self.cameraSession.canAddOutput(photoOutput) {
+                    self.cameraSession.addOutput(photoOutput)
+                    await MainActor.run {
+                        self.photoOutput = photoOutput
+                    }
+                    print("[CalibrationVM] Added photo output")
+                }
+
+                self.cameraSession.commitConfiguration()
+                print("[CalibrationVM] Camera session configured")
+
+                self.cameraSession.startRunning()
+                print("[CalibrationVM] Camera session started running")
+
+                await MainActor.run {
+                    self.isCameraReady = true
+                    print("[CalibrationVM] Camera is ready")
+                }
+            } catch {
+                print("[CalibrationVM] Camera setup error: \(error)")
+                await MainActor.run {
+                    self.errorMessage = "Camera setup failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    func stopCamera() {
+        print("[CalibrationVM] stopCamera called")
+        cameraSession.stopRunning()
+        isCameraReady = false
+    }
+
+    func capturePhoto() {
+        print("[CalibrationVM] capturePhoto called")
+        guard let photoOutput = photoOutput else {
+            print("[CalibrationVM] No photo output available!")
+            return
+        }
+
+        isCapturing = true
+        let settings = AVCapturePhotoSettings()
+        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
+
+    func retakePhoto() {
+        print("[CalibrationVM] retakePhoto called")
+        capturedImage = nil
+        sampleReading = ""
+    }
+
     func createMeter() async -> Bool {
+        print("[CalibrationVM] createMeter called")
         isLoading = true
         defer { isLoading = false }
 
@@ -100,6 +243,7 @@ class CalibrationViewModel: ObservableObject {
                 postalCode: postalCode.isEmpty ? nil : postalCode
             )
             createdMeter = meter
+            print("[CalibrationVM] Meter created: \(meter.id)")
 
             // Create first reading if sample provided
             if !sampleReading.isEmpty {
@@ -108,16 +252,19 @@ class CalibrationViewModel: ObservableObject {
                     meterId: meter.id,
                     rawValue: sampleReading,
                     normalizedValue: normalizedValue,
-                    confidence: 1.0,
-                    source: "calibration"
+                    confidence: capturedImage != nil ? 0.9 : 1.0,
+                    source: capturedImage != nil ? "calibration_ocr" : "calibration_manual"
                 )
+                print("[CalibrationVM] First reading created")
             }
 
             return true
         } catch let error as APIError {
+            print("[CalibrationVM] API error: \(error)")
             errorMessage = error.localizedDescription
             return false
         } catch {
+            print("[CalibrationVM] Error: \(error)")
             errorMessage = error.localizedDescription
             return false
         }
@@ -126,6 +273,37 @@ class CalibrationViewModel: ObservableObject {
     private func normalizeReading(_ reading: String) -> String {
         let digitsOnly = reading.filter { $0.isNumber || $0 == "." }
         return digitsOnly
+    }
+}
+
+// MARK: - Photo Capture Delegate
+
+extension CalibrationViewModel: AVCapturePhotoCaptureDelegate {
+    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        print("[CalibrationVM] Photo capture completed")
+
+        Task { @MainActor in
+            self.isCapturing = false
+
+            if let error = error {
+                print("[CalibrationVM] Photo capture error: \(error)")
+                self.errorMessage = "Capture failed: \(error.localizedDescription)"
+                return
+            }
+
+            guard let data = photo.fileDataRepresentation(),
+                  let image = UIImage(data: data) else {
+                print("[CalibrationVM] Failed to get image data")
+                self.errorMessage = "Failed to process captured image"
+                return
+            }
+
+            print("[CalibrationVM] Photo captured successfully, size: \(image.size)")
+            self.capturedImage = image
+
+            // TODO: Run OCR on the image to detect reading
+            // For now, user enters manually after capture
+        }
     }
 }
 
@@ -342,80 +520,50 @@ struct SampleReadingStep: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 24) {
+            VStack(spacing: 16) {
                 // Header
                 VStack(spacing: 8) {
                     Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 48))
+                        .font(.system(size: 40))
                         .foregroundStyle(.green)
 
                     Text("First Reading")
                         .font(.title2.bold())
 
-                    Text("Enter your current meter reading to calibrate")
+                    Text("Take a photo of your meter to capture the reading")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top)
 
-                // Reading Input
-                VStack(spacing: 16) {
-                    // Visual Input
-                    HStack(spacing: 4) {
-                        ForEach(0..<viewModel.digitCount, id: \.self) { index in
-                            let char = getCharacter(at: index)
-                            DigitBox(character: char, meterType: viewModel.meterType)
-
-                            if viewModel.hasDecimalPoint && index == viewModel.digitCount - 2 {
-                                Text(".")
-                                    .font(.title.bold())
-                            }
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                    // Hidden Text Field
-                    TextField("Enter reading", text: $viewModel.sampleReading)
-                        .keyboardType(.numberPad)
-                        .textFieldStyle(.roundedBorder)
-                        .focused($isInputFocused)
-                        .onChange(of: viewModel.sampleReading) { _, newValue in
-                            let filtered = newValue.filter { $0.isNumber }
-                            if filtered.count > viewModel.digitCount {
-                                viewModel.sampleReading = String(filtered.prefix(viewModel.digitCount))
-                            } else {
-                                viewModel.sampleReading = filtered
-                            }
-                        }
-
-                    // Instructions
-                    VStack(alignment: .leading, spacing: 8) {
-                        InstructionRow(
-                            icon: "info.circle",
-                            text: "Read all \(viewModel.digitCount) digits from left to right"
-                        )
-                        InstructionRow(
-                            icon: "eye",
-                            text: "Ignore any red or highlighted numbers"
-                        )
-                        InstructionRow(
-                            icon: "arrow.up.circle",
-                            text: "Round down if a digit is between numbers"
-                        )
-                    }
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                // Camera Permission Check
+                if viewModel.cameraPermissionStatus == .notDetermined {
+                    CameraPermissionCard(viewModel: viewModel)
+                } else if viewModel.cameraPermissionStatus == .denied || viewModel.cameraPermissionStatus == .restricted {
+                    CameraDeniedCard(viewModel: viewModel)
+                } else if viewModel.useCamera {
+                    // Camera Mode
+                    CameraCaptureCard(viewModel: viewModel)
+                } else {
+                    // Manual Mode
+                    ManualEntryCard(viewModel: viewModel, isInputFocused: _isInputFocused)
                 }
-                .padding(.horizontal)
+
+                // Reading Display (shows after capture or manual entry)
+                if !viewModel.sampleReading.isEmpty {
+                    ReadingDisplayCard(viewModel: viewModel)
+                }
             }
+            .padding(.horizontal)
             .padding(.bottom, 100)
         }
-        .onTapGesture {
-            isInputFocused = true
+        .onAppear {
+            print("[SampleReadingStep] onAppear")
+            viewModel.checkCameraPermission()
+            if viewModel.cameraPermissionStatus == .authorized && viewModel.useCamera {
+                viewModel.startCamera()
+            }
         }
     }
 
@@ -426,6 +574,348 @@ struct SampleReadingStep: View {
             return String(reading[stringIndex])
         }
         return ""
+    }
+}
+
+// MARK: - Camera Permission Card
+
+struct CameraPermissionCard: View {
+    @ObservedObject var viewModel: CalibrationViewModel
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "camera.circle.fill")
+                .font(.system(size: 48))
+                .foregroundStyle(.blue)
+
+            Text("Camera Access Required")
+                .font(.headline)
+
+            Text("To scan your meter reading, we need camera access. You can also enter readings manually.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                print("[CameraPermissionCard] Requesting permission")
+                Task {
+                    await viewModel.requestCameraPermission()
+                }
+            } label: {
+                Label("Allow Camera Access", systemImage: "camera")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+
+            Button {
+                print("[CameraPermissionCard] Switching to manual")
+                viewModel.useCamera = false
+            } label: {
+                Text("Enter Manually Instead")
+                    .font(.subheadline)
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10)
+    }
+}
+
+// MARK: - Camera Denied Card
+
+struct CameraDeniedCard: View {
+    @ObservedObject var viewModel: CalibrationViewModel
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "camera.badge.ellipsis")
+                .font(.system(size: 48))
+                .foregroundStyle(.orange)
+
+            Text("Camera Access Denied")
+                .font(.headline)
+
+            Text("Enable camera access in Settings, or enter your reading manually.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Label("Open Settings", systemImage: "gear")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+
+            Button {
+                print("[CameraDeniedCard] Switching to manual")
+                viewModel.useCamera = false
+            } label: {
+                Text("Enter Manually Instead")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10)
+    }
+}
+
+// MARK: - Camera Capture Card
+
+struct CameraCaptureCard: View {
+    @ObservedObject var viewModel: CalibrationViewModel
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if let capturedImage = viewModel.capturedImage {
+                // Show captured image
+                Image(uiImage: capturedImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                HStack(spacing: 12) {
+                    Button {
+                        print("[CameraCaptureCard] Retake tapped")
+                        viewModel.retakePhoto()
+                    } label: {
+                        Label("Retake", systemImage: "arrow.counterclockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                // Show camera preview
+                ZStack {
+                    if viewModel.isCameraReady {
+                        CalibrationCameraPreview(session: viewModel.cameraSession)
+                            .frame(height: 220)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.black)
+                            .frame(height: 220)
+                            .overlay {
+                                VStack(spacing: 8) {
+                                    ProgressView()
+                                        .tint(.white)
+                                    Text("Starting camera...")
+                                        .font(.caption)
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                    }
+
+                    // Capture guide overlay
+                    if viewModel.isCameraReady {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white, lineWidth: 2)
+                            .frame(width: 200, height: 60)
+                    }
+                }
+
+                // Capture button
+                Button {
+                    print("[CameraCaptureCard] Capture tapped")
+                    viewModel.capturePhoto()
+                } label: {
+                    if viewModel.isCapturing {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Label("Capture Reading", systemImage: "camera.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .disabled(!viewModel.isCameraReady || viewModel.isCapturing)
+            }
+
+            // Switch to manual entry
+            Button {
+                print("[CameraCaptureCard] Switch to manual")
+                viewModel.useCamera = false
+                viewModel.stopCamera()
+            } label: {
+                Text("Enter Manually Instead")
+                    .font(.caption)
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10)
+    }
+}
+
+// MARK: - Manual Entry Card
+
+struct ManualEntryCard: View {
+    @ObservedObject var viewModel: CalibrationViewModel
+    @FocusState var isInputFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // Visual Input
+            HStack(spacing: 4) {
+                ForEach(0..<viewModel.digitCount, id: \.self) { index in
+                    let char = getCharacter(at: index)
+                    DigitBox(character: char, meterType: viewModel.meterType)
+
+                    if viewModel.hasDecimalPoint && index == viewModel.digitCount - 2 {
+                        Text(".")
+                            .font(.title.bold())
+                    }
+                }
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .onTapGesture {
+                isInputFocused = true
+            }
+
+            // Text Field
+            TextField("Enter reading", text: $viewModel.sampleReading)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+                .focused($isInputFocused)
+                .onChange(of: viewModel.sampleReading) { _, newValue in
+                    let filtered = newValue.filter { $0.isNumber }
+                    if filtered.count > viewModel.digitCount {
+                        viewModel.sampleReading = String(filtered.prefix(viewModel.digitCount))
+                    } else {
+                        viewModel.sampleReading = filtered
+                    }
+                }
+
+            // Instructions
+            VStack(alignment: .leading, spacing: 8) {
+                InstructionRow(
+                    icon: "info.circle",
+                    text: "Read all \(viewModel.digitCount) digits from left to right"
+                )
+                InstructionRow(
+                    icon: "eye",
+                    text: "Ignore any red or highlighted numbers"
+                )
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            // Switch to camera
+            if viewModel.cameraPermissionStatus == .authorized {
+                Button {
+                    print("[ManualEntryCard] Switch to camera")
+                    viewModel.useCamera = true
+                    viewModel.startCamera()
+                } label: {
+                    Label("Use Camera Instead", systemImage: "camera")
+                        .font(.caption)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10)
+    }
+
+    func getCharacter(at index: Int) -> String {
+        let reading = viewModel.sampleReading
+        if index < reading.count {
+            let stringIndex = reading.index(reading.startIndex, offsetBy: index)
+            return String(reading[stringIndex])
+        }
+        return ""
+    }
+}
+
+// MARK: - Reading Display Card
+
+struct ReadingDisplayCard: View {
+    @ObservedObject var viewModel: CalibrationViewModel
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Reading Captured")
+                    .font(.headline)
+                Spacer()
+            }
+
+            // Reading display
+            HStack(spacing: 4) {
+                ForEach(Array(viewModel.sampleReading.enumerated()), id: \.offset) { _, char in
+                    Text(String(char))
+                        .font(.system(size: 24, weight: .bold, design: .monospaced))
+                        .frame(width: 28, height: 36)
+                        .background(viewModel.meterType.color.opacity(0.1))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+
+                Text(viewModel.meterType.unit)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 8)
+            }
+
+            // Edit field
+            TextField("Edit reading", text: $viewModel.sampleReading)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+                .font(.body.monospacedDigit())
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10)
+    }
+}
+
+// MARK: - Calibration Camera Preview
+
+struct CalibrationCameraPreview: UIViewRepresentable {
+    let session: AVCaptureSession
+
+    func makeUIView(context: Context) -> UIView {
+        print("[CalibrationCameraPreview] makeUIView")
+        let view = UIView(frame: .zero)
+        view.backgroundColor = .black
+
+        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(previewLayer)
+        context.coordinator.previewLayer = previewLayer
+
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            context.coordinator.previewLayer?.frame = uiView.bounds
+            print("[CalibrationCameraPreview] updateUIView, frame: \(uiView.bounds)")
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator {
+        var previewLayer: AVCaptureVideoPreviewLayer?
     }
 }
 

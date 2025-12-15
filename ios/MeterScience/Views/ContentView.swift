@@ -22,7 +22,6 @@ struct ContentView: View {
 struct MainTabView: View {
     @State private var selectedTab = 0
     @State private var showingAddMeter = false
-    @State private var showingScan = false
     @State private var selectedMeter: MeterResponse?
 
     var body: some View {
@@ -31,7 +30,6 @@ struct MainTabView: View {
             MetersListView(
                 onScan: { meter in
                     selectedMeter = meter
-                    showingScan = true
                 },
                 onAddMeter: {
                     showingAddMeter = true
@@ -66,10 +64,8 @@ struct MainTabView: View {
         .sheet(isPresented: $showingAddMeter) {
             CalibrationView()
         }
-        .fullScreenCover(isPresented: $showingScan) {
-            if let meter = selectedMeter {
-                SmartScanView(meter: meter)
-            }
+        .fullScreenCover(item: $selectedMeter) { meter in
+            SmartScanView(meter: meter)
         }
     }
 }

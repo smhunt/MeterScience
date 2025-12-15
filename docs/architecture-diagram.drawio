@@ -1,0 +1,238 @@
+<mxfile host="app.diagrams.net" modified="2025-12-15T00:00:00.000Z" agent="Claude" version="21.0.0" etag="meterscience-architecture" type="device">
+  <diagram id="meterscience-arch" name="MeterScience Architecture">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Background Layers -->
+        <mxCell id="client-layer" value="Client Layer" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E1F5FE;strokeColor=#01579B;verticalAlign=top;fontSize=14;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="280" height="800" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="api-layer" value="API Layer" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#4A148C;verticalAlign=top;fontSize=14;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="320" height="800" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="data-layer" value="Data Layer" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;verticalAlign=top;fontSize=14;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="720" y="40" width="280" height="800" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="services-layer" value="External Services" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#1B5E20;verticalAlign=top;fontSize=14;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="40" width="240" height="800" as="geometry"/>
+        </mxCell>
+
+        <!-- iOS App -->
+        <mxCell id="ios-app" value="iOS App&lt;br&gt;&lt;b&gt;SwiftUI + Vision OCR&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Camera scanning&lt;br&gt;• Offline-first&lt;br&gt;• Local SQLite&lt;br&gt;• Background sync" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2196F3;strokeColor=#0D47A1;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="240" height="140" as="geometry"/>
+        </mxCell>
+
+        <!-- MeterPi -->
+        <mxCell id="meterpi" value="MeterPi Hardware&lt;br&gt;&lt;b&gt;Raspberry Pi&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Camera capture&lt;br&gt;• Local OCR&lt;br&gt;• Flask API (port 5000)&lt;br&gt;• 3-frame consensus&lt;br&gt;• MQTT publishing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1976D2;strokeColor=#0D47A1;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="260" width="240" height="160" as="geometry"/>
+        </mxCell>
+
+        <!-- Web Browser (Future) -->
+        <mxCell id="web-client" value="Web App&lt;br&gt;&lt;b&gt;(Planned)&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Marketing site&lt;br&gt;• Dashboard&lt;br&gt;• Campaign mgmt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#64B5F6;strokeColor=#0D47A1;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="460" width="240" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- FastAPI Backend -->
+        <mxCell id="fastapi" value="FastAPI Backend&lt;br&gt;&lt;b&gt;Python + Uvicorn&lt;/b&gt;&lt;br&gt;&lt;br&gt;/api/v1/users&lt;br&gt;/api/v1/meters&lt;br&gt;/api/v1/readings&lt;br&gt;/api/v1/campaigns&lt;br&gt;/api/v1/verify&lt;br&gt;/api/v1/stats&lt;br&gt;/api/v1/webhooks&lt;br&gt;&lt;br&gt;• JWT auth&lt;br&gt;• OAuth integration&lt;br&gt;• Async SQLAlchemy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#9C27B0;strokeColor=#4A148C;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="380" y="120" width="280" height="280" as="geometry"/>
+        </mxCell>
+
+        <!-- Auth Service -->
+        <mxCell id="auth-service" value="Auth Service&lt;br&gt;&lt;b&gt;JWT + OAuth&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Token generation&lt;br&gt;• Token validation&lt;br&gt;• Social login" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B1FA2;strokeColor=#4A148C;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="380" y="440" width="280" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Webhook Service -->
+        <mxCell id="webhook-service" value="Webhook Service&lt;br&gt;&lt;b&gt;Enterprise Integration&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Event dispatch&lt;br&gt;• Retry logic&lt;br&gt;• Signature validation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#8E24AA;strokeColor=#4A148C;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="380" y="580" width="280" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- PostgreSQL + PostGIS -->
+        <mxCell id="postgresql" value="PostgreSQL + PostGIS&lt;br&gt;&lt;b&gt;Primary Database&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Users&lt;br&gt;• Meters&lt;br&gt;• Readings&lt;br&gt;• Campaigns&lt;br&gt;• Verifications&lt;br&gt;• Geospatial queries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9800;strokeColor=#E65100;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="740" y="80" width="240" height="180" as="geometry"/>
+        </mxCell>
+
+        <!-- Redis -->
+        <mxCell id="redis" value="Redis&lt;br&gt;&lt;b&gt;Cache Layer&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Session cache&lt;br&gt;• Stats cache&lt;br&gt;• Rate limiting&lt;br&gt;• Job queue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FB8C00;strokeColor=#E65100;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="740" y="300" width="240" height="140" as="geometry"/>
+        </mxCell>
+
+        <!-- MinIO -->
+        <mxCell id="minio" value="MinIO&lt;br&gt;&lt;b&gt;Object Storage&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Meter images&lt;br&gt;• OCR captures&lt;br&gt;• User uploads&lt;br&gt;• S3-compatible API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F57C00;strokeColor=#E65100;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="740" y="480" width="240" height="140" as="geometry"/>
+        </mxCell>
+
+        <!-- Home Assistant -->
+        <mxCell id="homeassistant" value="Home Assistant&lt;br&gt;&lt;b&gt;MQTT Integration&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Real-time readings&lt;br&gt;• Automation triggers&lt;br&gt;• Energy dashboard" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4CAF50;strokeColor=#1B5E20;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="80" width="200" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Stripe -->
+        <mxCell id="stripe" value="Stripe&lt;br&gt;&lt;b&gt;Payments&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Subscriptions&lt;br&gt;• Webhooks&lt;br&gt;• Billing portal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#66BB6A;strokeColor=#1B5E20;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="240" width="200" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Enterprise Systems -->
+        <mxCell id="enterprise" value="Enterprise Systems&lt;br&gt;&lt;b&gt;Webhook Recipients&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Utility billing&lt;br&gt;• Analytics platforms&lt;br&gt;• Custom integrations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#81C784;strokeColor=#1B5E20;fontColor=#FFFFFF;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="380" width="200" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Connections: iOS App to FastAPI -->
+        <mxCell id="ios-to-api" value="HTTPS/REST&lt;br&gt;OAuth + JWT" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#2196F3;fontColor=#0D47A1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="ios-app" target="fastapi">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="150"/>
+              <mxPoint x="340" y="200"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connections: MeterPi to FastAPI -->
+        <mxCell id="meterpi-to-api" value="HTTPS/REST&lt;br&gt;Cloud Sync" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#1976D2;fontColor=#0D47A1;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="meterpi" target="fastapi">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="340"/>
+              <mxPoint x="340" y="300"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connections: MeterPi to Home Assistant -->
+        <mxCell id="meterpi-to-ha" value="MQTT" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#4CAF50;fontColor=#1B5E20;fontSize=10;labelBackgroundColor=#FFFFFF;dashed=1;" edge="1" parent="1" source="meterpi" target="homeassistant">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="180" y="440"/>
+              <mxPoint x="1160" y="440"/>
+              <mxPoint x="1160" y="140"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connections: FastAPI to PostgreSQL -->
+        <mxCell id="api-to-postgres" value="SQL&lt;br&gt;SQLAlchemy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;strokeColor=#9C27B0;fontColor=#4A148C;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fastapi" target="postgresql">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="170"/>
+              <mxPoint x="700" y="170"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connections: FastAPI to Redis -->
+        <mxCell id="api-to-redis" value="Cache&lt;br&gt;Sessions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9C27B0;fontColor=#4A148C;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fastapi" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="320"/>
+              <mxPoint x="700" y="370"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connections: FastAPI to MinIO -->
+        <mxCell id="api-to-minio" value="S3 API&lt;br&gt;Images" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9C27B0;fontColor=#4A148C;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="fastapi" target="minio">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="380"/>
+              <mxPoint x="700" y="550"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connections: FastAPI to Stripe -->
+        <mxCell id="api-to-stripe" value="Stripe API&lt;br&gt;Webhooks" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#9C27B0;fontColor=#4A148C;fontSize=10;labelBackgroundColor=#FFFFFF;dashed=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="fastapi" target="stripe">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1020" y="240"/>
+              <mxPoint x="1020" y="290"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Connections: Webhook Service to Enterprise -->
+        <mxCell id="webhook-to-enterprise" value="HTTPS&lt;br&gt;Event Push" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#8E24AA;fontColor=#4A148C;fontSize=10;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="webhook-service" target="enterprise">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1020" y="630"/>
+              <mxPoint x="1020" y="440"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Web Client to API (Future) -->
+        <mxCell id="web-to-api" value="HTTPS/REST&lt;br&gt;OAuth + JWT" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64B5F6;fontColor=#0D47A1;fontSize=10;labelBackgroundColor=#FFFFFF;dashed=1;" edge="1" parent="1" source="web-client" target="auth-service">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="520"/>
+              <mxPoint x="340" y="490"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend-box" value="Legend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#424242;verticalAlign=top;fontSize=12;fontStyle=1;align=left;spacingLeft=10;spacingTop=5;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="40" width="240" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend-solid" value="" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;strokeColor=#2196F3;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1340" y="80" as="sourcePoint"/>
+            <mxPoint x="1400" y="80" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-solid-text" value="Active connection" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="70" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend-dashed" value="" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;strokeColor=#4CAF50;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1340" y="110" as="sourcePoint"/>
+            <mxPoint x="1400" y="110" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-dashed-text" value="Optional/Planned" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="100" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend-bidirectional" value="" style="edgeStyle=none;rounded=0;html=1;strokeWidth=2;strokeColor=#9C27B0;startArrow=classic;startFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1340" y="140" as="sourcePoint"/>
+            <mxPoint x="1400" y="140" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-bidirectional-text" value="Bidirectional" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="130" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend-thick" value="" style="edgeStyle=none;rounded=0;html=1;strokeWidth=3;strokeColor=#FF9800;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1340" y="170" as="sourcePoint"/>
+            <mxPoint x="1400" y="170" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend-thick-text" value="Primary data flow" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="160" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Architecture Notes -->
+        <mxCell id="notes-box" value="Architecture Notes" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#F57F17;verticalAlign=top;fontSize=12;fontStyle=1;align=left;spacingLeft=10;spacingTop=5;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="240" width="240" height="240" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="notes-content" value="&lt;b&gt;Key Principles:&lt;/b&gt;&lt;br&gt;&lt;br&gt;• Local-first design&lt;br&gt;  iOS app works offline&lt;br&gt;&lt;br&gt;• Privacy by design&lt;br&gt;  Min 5 homes for aggregates&lt;br&gt;&lt;br&gt;• Multi-frame consensus&lt;br&gt;  3 matching frames (MeterPi)&lt;br&gt;&lt;br&gt;• Gamification core&lt;br&gt;  XP, streaks, badges&lt;br&gt;&lt;br&gt;• Subscription tiers&lt;br&gt;  Free → District ($9.99/mo)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="1330" y="265" width="220" height="205" as="geometry"/>
+        </mxCell>
+
+        <!-- Title -->
+        <mxCell id="title" value="MeterScience Platform Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#1A237E;" vertex="1" parent="1">
+          <mxGeometry x="360" y="0" width="680" height="40" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
