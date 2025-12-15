@@ -126,6 +126,9 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
     private var processingFrame = false
     private var lastProcessedTime = Date()
+    private var sessionStartTime = Date()
+    private let minimumScanTime: TimeInterval = 2.0  // Wait at least 2 seconds before auto-detecting
+    private let minimumAutoConfidence: Float = 0.85  // Only auto-detect with high confidence
 
     enum ScanState {
         case scanning
@@ -234,6 +237,7 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
             // Now set cameraReady on main thread
             print("[SmartScanVM] Setting cameraReady = true")
+            sessionStartTime = Date()
             cameraReady = true
         } catch {
             print("[SmartScanVM] Camera setup error: \(error)")
@@ -337,6 +341,7 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
     func processImageAsync(_ image: CIImage, fromCapture: Bool) async {
         let results = await textRecognizer.recognizeText(in: image)
+        print("[SmartScanVM] OCR found \(results.count) text regions")
 
         // Filter for digit sequences
         let digitReadings = results.compactMap { result -> RecognizedReading? in
@@ -350,6 +355,7 @@ class SmartScanViewModel: NSObject, ObservableObject {
                 boundingBox: result.boundingBox
             )
         }
+        print("[SmartScanVM] Found \(digitReadings.count) potential readings, fromCapture: \(fromCapture)")
 
         if digitReadings.isEmpty {
             // If from capture button and no digits found, still show result card for manual entry
@@ -376,10 +382,27 @@ class SmartScanViewModel: NSObject, ObservableObject {
         }
 
         if let best = sorted.first {
+            print("[SmartScanVM] Best reading: \(best.digitsOnly) confidence: \(best.confidence)")
+
+            // For auto-detection (not from capture button), require higher confidence and minimum scan time
+            if !fromCapture {
+                let timeSinceStart = Date().timeIntervalSince(sessionStartTime)
+                let meetsTimeRequirement = timeSinceStart >= minimumScanTime
+                let meetsConfidenceRequirement = best.confidence >= minimumAutoConfidence
+
+                print("[SmartScanVM] Auto-detect check: time=\(timeSinceStart)s (need \(minimumScanTime)s), confidence=\(best.confidence) (need \(minimumAutoConfidence))")
+
+                if !meetsTimeRequirement || !meetsConfidenceRequirement {
+                    print("[SmartScanVM] Skipping auto-detect, requirements not met")
+                    return
+                }
+            }
+
             self.detectedReading = best.digitsOnly
             self.confidence = best.confidence
             self.allCandidates = Array(sorted.prefix(5))
             self.scanState = .detected
+            print("[SmartScanVM] Set scanState to .detected")
         }
     }
 }
