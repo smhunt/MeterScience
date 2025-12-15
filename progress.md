@@ -254,6 +254,52 @@ web/
 
 ---
 
+## Session: Camera Fix + System Camera
+**Date:** 2025-12-15
+
+### Completed
+
+#### Camera/Scanner Working ✅
+- [x] Fixed white screen camera preview issue (live preview layer wasn't rendering)
+- [x] Switched to UIImagePickerController (system camera) for reliable capture
+- [x] OCR works on captured photos - detecting meter readings
+- [x] Multiple OCR candidates shown (meter reading + serial numbers)
+- [x] Created PR #1 for camera fixes (branch: fix/camera-preview-timing)
+
+#### Git Workflow Improvements ✅
+- [x] Added Git workflow guidelines to CLAUDE.md
+- [x] Always use feature branches before making changes
+- [x] Include testing instructions in PRs
+
+#### Architecture Documentation ✅
+- [x] Created draw.io architecture diagram (docs/architecture-diagram.drawio)
+
+### Backlog (Future Features)
+
+#### Live Camera Preview (Auto-capture)
+- The custom AVCaptureSession preview layer never rendered properly
+- Live OCR was working (detected text) but preview was white
+- Possibly SwiftUI UIViewRepresentable layout issue
+- Low priority - system camera works well as workaround
+
+#### Enhanced Meter Metadata Collection
+- Capture multiple photos per scan session (meter face, serial number, location)
+- OCR candidates could identify: meter reading vs meter serial number
+- Bonus XP for complete metadata (photo of meter label, utility account number)
+- Could help with verification - serial number links readings to specific meter
+
+### Git Commits
+- `1b5774f` Clean up SmartScanView - remove unused camera code
+- `93794f6` Use system camera (UIImagePickerController) for reliable capture
+- `ef9d068` Add Git workflow guidelines to CLAUDE.md
+
+### Next Steps
+1. Merge camera fix PR
+2. Continue with other iOS app features
+3. Test full flow: register → add meter → scan reading → verify
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**
