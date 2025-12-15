@@ -159,40 +159,43 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
         switch status {
         case .notDetermined:
-            print("Requesting camera permission...")
+            print("[SmartScanVM] Requesting camera permission...")
             let granted = await AVCaptureDevice.requestAccess(for: .video)
-            print("Camera permission granted: \(granted)")
+            print("[SmartScanVM] Camera permission granted: \(granted)")
             if !granted {
                 cameraPermissionDenied = true
                 cameraUnavailable = true
                 return
             }
         case .denied, .restricted:
-            print("Camera permission denied or restricted")
+            print("[SmartScanVM] Camera permission denied or restricted")
             cameraPermissionDenied = true
             cameraUnavailable = true
             return
         case .authorized:
-            print("Camera permission authorized")
+            print("[SmartScanVM] Camera permission authorized")
             break
         @unknown default:
             break
         }
 
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
-            print("No camera device available")
+            print("[SmartScanVM] No camera device available")
             cameraUnavailable = true
             return
         }
-        print("Camera device found: \(device.localizedName)")
+        print("[SmartScanVM] Camera device found: \(device.localizedName)")
 
         do {
             let input = try AVCaptureDeviceInput(device: device)
+            print("[SmartScanVM] Created camera input")
 
             session.beginConfiguration()
+            print("[SmartScanVM] Session configuration started")
 
             if session.canAddInput(input) {
                 session.addInput(input)
+                print("[SmartScanVM] Added camera input to session")
             }
 
             // Photo output for capturing
@@ -200,6 +203,7 @@ class SmartScanViewModel: NSObject, ObservableObject {
             if session.canAddOutput(photoOutput) {
                 session.addOutput(photoOutput)
                 self.captureOutput = photoOutput
+                print("[SmartScanVM] Added photo output to session")
             }
 
             // Video output for live OCR
@@ -208,20 +212,31 @@ class SmartScanViewModel: NSObject, ObservableObject {
             if session.canAddOutput(videoOutput) {
                 session.addOutput(videoOutput)
                 self.videoOutput = videoOutput
+                print("[SmartScanVM] Added video output to session")
             }
 
             session.commitConfiguration()
+            print("[SmartScanVM] Session configuration committed")
 
-            // Start camera on background thread
-            Task.detached { [weak self] in
-                self?.session.startRunning()
-                await MainActor.run {
-                    self?.cameraReady = true
-                    print("Camera session started and ready")
+            // Start camera on background thread and wait for it to start
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    guard let self = self else {
+                        continuation.resume()
+                        return
+                    }
+                    print("[SmartScanVM] Starting camera session...")
+                    self.session.startRunning()
+                    print("[SmartScanVM] Camera session started, isRunning: \(self.session.isRunning)")
+                    continuation.resume()
                 }
             }
+
+            // Now set cameraReady on main thread
+            print("[SmartScanVM] Setting cameraReady = true")
+            cameraReady = true
         } catch {
-            print("Camera setup error: \(error)")
+            print("[SmartScanVM] Camera setup error: \(error)")
             errorMessage = "Camera setup failed: \(error.localizedDescription)"
             showError = true
             cameraUnavailable = true
@@ -466,25 +481,50 @@ struct RecognizedReading: Identifiable {
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(previewLayer)
-        context.coordinator.previewLayer = previewLayer
+    func makeUIView(context: Context) -> CameraPreviewUIView {
+        print("[CameraPreview] makeUIView called")
+        let view = CameraPreviewUIView(session: session)
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
-        context.coordinator.previewLayer?.frame = uiView.bounds
+    func updateUIView(_ uiView: CameraPreviewUIView, context: Context) {
+        print("[CameraPreview] updateUIView called, bounds: \(uiView.bounds)")
+        uiView.updateSession(session)
+    }
+}
+
+class CameraPreviewUIView: UIView {
+    private var previewLayer: AVCaptureVideoPreviewLayer?
+
+    init(session: AVCaptureSession) {
+        super.init(frame: .zero)
+        backgroundColor = .black
+        setupPreviewLayer(session: session)
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 
-    class Coordinator {
-        var previewLayer: AVCaptureVideoPreviewLayer?
+    private func setupPreviewLayer(session: AVCaptureSession) {
+        print("[CameraPreviewUIView] setupPreviewLayer called, session running: \(session.isRunning)")
+        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.backgroundColor = UIColor.black.cgColor
+        layer.addSublayer(previewLayer)
+        self.previewLayer = previewLayer
+    }
+
+    func updateSession(_ session: AVCaptureSession) {
+        if previewLayer?.session !== session {
+            previewLayer?.session = session
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        print("[CameraPreviewUIView] layoutSubviews called, bounds: \(bounds)")
+        previewLayer?.frame = bounds
     }
 }
 
