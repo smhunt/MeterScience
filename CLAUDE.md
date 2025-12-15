@@ -199,8 +199,49 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 - MVVM with ObservableObject
 - Async/await for concurrency
 
+## Git Workflow
+
+**IMPORTANT: Always use feature branches for changes.**
+
+### Standard Workflow
+```bash
+# 1. Create feature branch BEFORE making changes
+git checkout -b feature/descriptive-name
+
+# 2. Make changes and commit
+git add . && git commit -m "Description of changes"
+
+# 3. Push branch and create PR
+git push -u origin feature/descriptive-name
+gh pr create --title "Title" --body "Description with testing instructions"
+
+# 4. Wait for user to test and approve
+
+# 5. Merge when approved
+gh pr merge --squash
+```
+
+### Branch Naming
+- `feature/` - New features (e.g., `feature/camera-integration`)
+- `fix/` - Bug fixes (e.g., `fix/login-error`)
+- `refactor/` - Code refactoring (e.g., `refactor/api-service`)
+- `docs/` - Documentation only (e.g., `docs/api-reference`)
+
+### PR Requirements
+Every PR must include:
+1. **Summary** - What changed and why
+2. **Testing Instructions** - Step-by-step guide to verify changes
+3. **Checklist** - Checkboxes for each test scenario
+
+### Rules
+- NEVER commit directly to `master` without a PR
+- ALWAYS create feature branch first, then make changes
+- ALWAYS include testing instructions in PR body
+- Wait for user approval before merging
+
 ## Planning Files
 
 - `prompt_plan.md` - Current sprint tasks
 - `progress.md` - Completed work log
 - `docs/PRODUCT_VISION.md` - Full product ecosystem and roadmap
+- `docs/architecture-diagram.drawio` - System architecture diagram
