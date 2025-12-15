@@ -3,10 +3,12 @@ import AVFoundation
 import Vision
 
 struct SmartScanView: View {
+    let meter: MeterResponse
     @StateObject private var viewModel: SmartScanViewModel
     @Environment(\.dismiss) private var dismiss
 
     init(meter: MeterResponse) {
+        self.meter = meter
         _viewModel = StateObject(wrappedValue: SmartScanViewModel(meter: meter))
     }
 
@@ -15,6 +17,36 @@ struct SmartScanView: View {
             if viewModel.cameraUnavailable {
                 // Fallback UI when camera isn't available (e.g., Simulator)
                 CameraUnavailableView(viewModel: viewModel, dismiss: dismiss)
+            } else if !viewModel.cameraReady {
+                // Loading state while camera initializes
+                ZStack {
+                    Color.black.ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("Starting camera...")
+                            .foregroundStyle(.white)
+                    }
+                    // Close button
+                    VStack {
+                        HStack {
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.title2)
+                                    .foregroundStyle(.white)
+                                    .padding(12)
+                                    .background(.white.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
+                            Spacer()
+                        }
+                        .padding()
+                        Spacer()
+                    }
+                }
             } else {
                 // Camera Preview
                 CameraPreview(session: viewModel.session)
@@ -84,6 +116,8 @@ class SmartScanViewModel: NSObject, ObservableObject {
     @Published var isSubmitting = false
     @Published var capturedImage: UIImage?
     @Published var cameraUnavailable = false
+    @Published var cameraPermissionDenied = false
+    @Published var cameraReady = false
     @Published var manualReading = ""
 
     private var captureOutput: AVCapturePhotoOutput?
@@ -102,23 +136,55 @@ class SmartScanViewModel: NSObject, ObservableObject {
     init(meter: MeterResponse) {
         self.meter = meter
         super.init()
+        print("[SmartScanVM] init for meter: \(meter.name)")
     }
 
     func startSession() {
+        print("[SmartScanVM] startSession called")
         Task {
             await setupCamera()
         }
     }
 
     func stopSession() {
+        print("[SmartScanVM] stopSession called")
         session.stopRunning()
     }
 
     private func setupCamera() async {
+        print("[SmartScanVM] setupCamera started")
+        // Check camera permission
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        print("[SmartScanVM] Camera permission status: \(status.rawValue)")
+
+        switch status {
+        case .notDetermined:
+            print("Requesting camera permission...")
+            let granted = await AVCaptureDevice.requestAccess(for: .video)
+            print("Camera permission granted: \(granted)")
+            if !granted {
+                cameraPermissionDenied = true
+                cameraUnavailable = true
+                return
+            }
+        case .denied, .restricted:
+            print("Camera permission denied or restricted")
+            cameraPermissionDenied = true
+            cameraUnavailable = true
+            return
+        case .authorized:
+            print("Camera permission authorized")
+            break
+        @unknown default:
+            break
+        }
+
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            print("No camera device available")
             cameraUnavailable = true
             return
         }
+        print("Camera device found: \(device.localizedName)")
 
         do {
             let input = try AVCaptureDeviceInput(device: device)
@@ -146,11 +212,19 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
             session.commitConfiguration()
 
-            Task {
-                session.startRunning()
+            // Start camera on background thread
+            Task.detached { [weak self] in
+                self?.session.startRunning()
+                await MainActor.run {
+                    self?.cameraReady = true
+                    print("Camera session started and ready")
+                }
             }
         } catch {
+            print("Camera setup error: \(error)")
             errorMessage = "Camera setup failed: \(error.localizedDescription)"
+            showError = true
+            cameraUnavailable = true
         }
     }
 
@@ -242,42 +316,55 @@ class SmartScanViewModel: NSObject, ObservableObject {
 
     func processImage(_ image: CIImage) {
         Task { @MainActor in
-            let results = await textRecognizer.recognizeText(in: image)
+            await processImageAsync(image, fromCapture: false)
+        }
+    }
 
-            // Filter for digit sequences
-            let digitReadings = results.compactMap { result -> RecognizedReading? in
-                let digitsOnly = result.text.filter { $0.isNumber }
-                guard digitsOnly.count >= 4 && digitsOnly.count <= 10 else { return nil }
+    func processImageAsync(_ image: CIImage, fromCapture: Bool) async {
+        let results = await textRecognizer.recognizeText(in: image)
 
-                return RecognizedReading(
-                    text: result.text,
-                    digitsOnly: digitsOnly,
-                    confidence: result.confidence,
-                    boundingBox: result.boundingBox
-                )
-            }
+        // Filter for digit sequences
+        let digitReadings = results.compactMap { result -> RecognizedReading? in
+            let digitsOnly = result.text.filter { $0.isNumber }
+            guard digitsOnly.count >= 4 && digitsOnly.count <= 10 else { return nil }
 
-            guard !digitReadings.isEmpty else { return }
+            return RecognizedReading(
+                text: result.text,
+                digitsOnly: digitsOnly,
+                confidence: result.confidence,
+                boundingBox: result.boundingBox
+            )
+        }
 
-            // Sort by confidence and digit count matching expected
-            let sorted = digitReadings.sorted { a, b in
-                // Prefer readings closer to expected digit count
-                let expectedDigits = meter.digitCount
-                let aDiff = abs(a.digitsOnly.count - expectedDigits)
-                let bDiff = abs(b.digitsOnly.count - expectedDigits)
-
-                if aDiff != bDiff {
-                    return aDiff < bDiff
-                }
-                return a.confidence > b.confidence
-            }
-
-            if let best = sorted.first {
-                self.detectedReading = best.digitsOnly
-                self.confidence = best.confidence
-                self.allCandidates = Array(sorted.prefix(5))
+        if digitReadings.isEmpty {
+            // If from capture button and no digits found, still show result card for manual entry
+            if fromCapture {
+                self.detectedReading = ""
+                self.confidence = 0
+                self.allCandidates = []
                 self.scanState = .detected
             }
+            return
+        }
+
+        // Sort by confidence and digit count matching expected
+        let sorted = digitReadings.sorted { a, b in
+            // Prefer readings closer to expected digit count
+            let expectedDigits = meter.digitCount
+            let aDiff = abs(a.digitsOnly.count - expectedDigits)
+            let bDiff = abs(b.digitsOnly.count - expectedDigits)
+
+            if aDiff != bDiff {
+                return aDiff < bDiff
+            }
+            return a.confidence > b.confidence
+        }
+
+        if let best = sorted.first {
+            self.detectedReading = best.digitsOnly
+            self.confidence = best.confidence
+            self.allCandidates = Array(sorted.prefix(5))
+            self.scanState = .detected
         }
     }
 }
@@ -310,6 +397,12 @@ extension SmartScanViewModel: AVCapturePhotoCaptureDelegate {
 
         Task { @MainActor in
             self.capturedImage = image
+
+            // Run OCR on captured image
+            if let cgImage = image.cgImage {
+                let ciImage = CIImage(cgImage: cgImage)
+                await self.processImageAsync(ciImage, fromCapture: true)
+            }
         }
     }
 }
@@ -501,28 +594,37 @@ struct ResultCard: View {
         VStack(spacing: 16) {
             // Header
             HStack {
-                Text("Reading Detected")
+                Text(displayReading.isEmpty ? "Enter Reading" : "Reading Detected")
                     .font(.headline)
 
                 Spacer()
 
-                ConfidenceBadge(confidence: viewModel.confidence)
+                if viewModel.confidence > 0 {
+                    ConfidenceBadge(confidence: viewModel.confidence)
+                }
             }
 
             // Reading Display
-            HStack(spacing: 4) {
-                ForEach(Array(displayReading.enumerated()), id: \.offset) { index, char in
-                    Text(String(char))
-                        .font(.system(size: 32, weight: .bold, design: .monospaced))
-                        .frame(width: 36, height: 48)
-                        .background(meterColor.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
+            if !displayReading.isEmpty {
+                HStack(spacing: 4) {
+                    ForEach(Array(displayReading.enumerated()), id: \.offset) { index, char in
+                        Text(String(char))
+                            .font(.system(size: 32, weight: .bold, design: .monospaced))
+                            .frame(width: 36, height: 48)
+                            .background(meterColor.opacity(0.1))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
 
-                Text(meterUnit)
+                    Text(meterUnit)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 8)
+                }
+            } else {
+                Text("No reading detected. Enter manually below.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 8)
+                    .padding(.vertical, 8)
             }
 
             // Edit Field
@@ -740,14 +842,31 @@ struct CameraUnavailableView: View {
             Spacer()
 
             // Icon
-            Image(systemName: "camera.fill")
+            Image(systemName: viewModel.cameraPermissionDenied ? "camera.badge.ellipsis" : "camera.fill")
                 .font(.system(size: 64))
                 .foregroundStyle(.secondary)
 
-            Text("Camera Not Available")
+            Text(viewModel.cameraPermissionDenied ? "Camera Access Required" : "Camera Not Available")
                 .font(.title2.bold())
 
-            Text("Enter your meter reading manually below.")
+            if viewModel.cameraPermissionDenied {
+                Text("Please allow camera access in Settings to scan your meter.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Open Settings", systemImage: "gear")
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 8)
+            }
+
+            Text("Or enter your meter reading manually below.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
