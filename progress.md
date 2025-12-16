@@ -495,6 +495,190 @@ ios/MeterScience/Views/
 
 ---
 
+## Session: MinIO Image Storage Setup
+**Date:** 2025-12-15
+**Duration:** ~1 hour
+
+### Completed
+
+#### MinIO Object Storage Integration ✅
+- [x] MinIO already configured in docker-compose.yml (ports 9000/9001)
+- [x] Created StorageService (/api/src/services/storage.py)
+  - S3-compatible client using boto3
+  - Automatic bucket creation on startup
+  - Public bucket policy for easy development
+  - Image hash generation (SHA256) for deduplication
+  - Storage organized by user/meter: `users/{user_id}/meters/{meter_id}/{timestamp}_{hash}.jpg`
+  - Hash-based storage for dedup: `hashes/{sha256}.jpg`
+  - Upload, delete, presigned URL support
+
+#### API Integration ✅
+- [x] Updated ReadingCreate model with `image_data` field (base64)
+- [x] Updated ReadingResponse model with `image_url` field
+- [x] POST /api/v1/readings - handles image upload
+  - Decode base64 image
+  - Upload to MinIO
+  - Store image_url in reading record
+  - Returns image_url in response
+- [x] POST /api/v1/readings/hardware - hardware device support
+  - Same image handling for MeterPi devices
+
+#### Configuration ✅
+- [x] Added boto3==1.34.28 to requirements.txt
+- [x] Updated .env.example with MinIO variables:
+  - MINIO_ENDPOINT=http://localhost:9000
+  - MINIO_ACCESS_KEY=meterscience
+  - MINIO_SECRET_KEY=meterscience123
+  - MINIO_BUCKET=meter-images
+  - MINIO_REGION=us-east-1
+- [x] Updated docker-compose.yml sandbox environment variables
+- [x] Added minio to depends_on for sandbox service
+
+#### Documentation ✅
+- [x] Created README_STORAGE.md with usage examples
+  - Upload, get URL, delete operations
+  - Storage structure documentation
+  - API integration examples
+  - Security notes for production
+
+### Files Created
+```
+api/src/services/
+├── storage.py           # MinIO storage service (8KB)
+└── README_STORAGE.md    # Documentation (2.8KB)
+```
+
+### Files Modified
+- `docker-compose.yml` - Added MinIO env vars to sandbox
+- `api/requirements.txt` - Added boto3
+- `api/src/routes/readings.py` - Image upload integration
+- `.env.example` - MinIO configuration
+
+### Key Features
+- **Deduplication**: Images with same hash reuse existing storage
+- **Organization**: Two-tier storage (user/meter + hash-based)
+- **Security**: Public read in dev, presigned URLs ready for production
+- **Async**: All storage operations are async-compatible
+- **Error Handling**: Proper HTTP exceptions for failures
+
+### Next Steps
+1. Test image upload from iOS app
+2. Update iOS SmartScanView to send base64 image data
+3. Display image_url in reading detail views
+4. Consider production security (presigned URLs, size limits, validation)
+
+---
+
+## Session: Phase 1 Beta Polish - Complete
+**Date:** 2025-12-15
+**Duration:** ~3 hours (parallel agents)
+
+### Completed
+
+#### Activity Log API (Agent 1) ✅
+- [x] Created `/api/v1/activity/` endpoint with pagination
+- [x] ActivityLog model with JSONB metadata support
+- [x] `log_activity()` helper for other routes to use
+- [x] Activity types: reading, verification, xp_gain, badge_earned, level_up, streak
+- [x] Filtering by activity_type, pagination (page, per_page)
+
+#### MinIO Image Storage (Agent 2) ✅
+- [x] StorageService with S3-compatible boto3 client
+- [x] Image upload with SHA256 deduplication
+- [x] Dual storage: user/meter organized + hash-based
+- [x] Presigned URL generation for secure access
+- [x] Integration with readings endpoint (`image_data` base64 field)
+- [x] `image_url` returned in ReadingResponse
+
+#### iOS Improvements (Agent 3) ✅
+- [x] **OfflineQueue.swift** - Queue readings when offline
+  - Network monitoring with NWPathMonitor
+  - Auto-sync when network available
+  - Persistent storage in UserDefaults
+  - OfflineQueueView UI component
+- [x] **TierEnforcement.swift** - Subscription tier access control
+  - Feature-based gating (neighborhoodStats, blockStats, etc.)
+  - Upgrade prompt view with benefits
+  - Tier badges for UI display
+- [x] **ActivityLogView API integration**
+  - `getActivity()` method in APIService
+  - API-first loading with local fallback
+  - ActivityItem now Codable with CodableColor wrapper
+
+#### API Unit Tests (Agent 4) ✅
+- [x] pytest-asyncio framework with in-memory SQLite
+- [x] `conftest.py` - Fixtures for test_user, auth_headers, db_session
+- [x] `test_users.py` - Registration, login, profile, referrals, leaderboard
+- [x] `test_meters.py` - CRUD, calibration, statistics
+- [x] `test_readings.py` - Create, list, pagination, auth checks
+- [x] `test_main.py` - Root endpoints, health check, CORS
+- [x] Test documentation in `api/TESTING.md`
+
+### Files Created
+```
+api/src/routes/
+├── activity.py              # Activity log API endpoint
+
+api/src/services/
+├── storage.py               # MinIO storage service
+└── README_STORAGE.md        # Storage documentation
+
+api/tests/
+├── __init__.py
+├── conftest.py              # Test fixtures
+├── test_main.py             # Root endpoint tests
+├── test_users.py            # User API tests
+├── test_meters.py           # Meter API tests
+├── test_readings.py         # Reading API tests
+└── README.md                # Test documentation
+
+api/
+├── pytest.ini               # Pytest configuration
+├── run_tests.sh             # Test runner script
+└── TESTING.md               # Test guide
+
+ios/MeterScience/Services/
+├── OfflineQueue.swift       # Offline reading queue
+└── TierEnforcement.swift    # Subscription tier enforcement
+```
+
+### Files Modified
+- `api/src/main.py` - Registered activity route
+- `api/src/models.py` - Added ActivityLog model
+- `api/src/routes/readings.py` - Image upload integration
+- `api/requirements.txt` - Added boto3, aiosqlite, pytest deps
+- `docker-compose.yml` - MinIO env vars for sandbox
+- `.env.example` - MinIO configuration
+- `ios/MeterScience/Services/APIService.swift` - getActivity() method
+- `ios/MeterScience/Models/Models.swift` - Codable ActivityItem
+- `ios/MeterScience/Views/ActivityLogView.swift` - API integration
+
+### Git Commits (feature/ios-offline-queue-tier-enforcement)
+- `8969f47` Add Phase 1: Activity Log API, MinIO Storage, and API Tests
+- Previous commits from Agent 3 for iOS improvements
+
+### Build Status
+✅ BUILD SUCCEEDED - iOS app compiles with all new code
+
+### Phase 1 Complete Summary
+| Task | Status | Agent |
+|------|--------|-------|
+| Activity Log API | ✅ Complete | 1 |
+| MinIO Image Storage | ✅ Complete | 2 |
+| Offline Queue | ✅ Complete | 3 |
+| Tier Enforcement | ✅ Complete | 3 |
+| ActivityLog API Integration | ✅ Complete | 3 |
+| API Unit Tests | ✅ Complete | 4 |
+
+### Next Steps (Phase 2)
+1. Stripe integration (backend)
+2. Receipt validation (iOS StoreKit)
+3. Email verification flow
+4. Push notifications (APNs)
+5. Privacy policy & ToS pages
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**
