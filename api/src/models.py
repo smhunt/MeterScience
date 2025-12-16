@@ -330,7 +330,7 @@ class ActivityLog(Base):
 
     activity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # reading, verification, xp_gain, badge_earned, level_up, streak
     description: Mapped[str] = mapped_column(String(500), nullable=False)
-    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Extra data like xp_amount, badge_name, etc.
+    extra_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Extra data like xp_amount, badge_name, etc.
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 

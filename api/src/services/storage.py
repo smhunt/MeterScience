@@ -23,19 +23,29 @@ class StorageService:
         self.secret_key = os.getenv("MINIO_SECRET_KEY", "meterscience123")
         self.bucket_name = os.getenv("MINIO_BUCKET", "meter-images")
         self.region = os.getenv("MINIO_REGION", "us-east-1")
+        self.available = False
+        self.s3_client = None
 
-        # Initialize S3 client
-        self.s3_client = boto3.client(
-            "s3",
-            endpoint_url=self.endpoint,
-            aws_access_key_id=self.access_key,
-            aws_secret_access_key=self.secret_key,
-            region_name=self.region,
-            config=Config(signature_version="s3v4"),
-        )
+        # Initialize S3 client - skip if storage is disabled
+        if os.getenv("STORAGE_ENABLED", "true").lower() == "false":
+            print("Storage service disabled via STORAGE_ENABLED=false")
+            return
 
-        # Ensure bucket exists
-        self._ensure_bucket_exists()
+        try:
+            self.s3_client = boto3.client(
+                "s3",
+                endpoint_url=self.endpoint,
+                aws_access_key_id=self.access_key,
+                aws_secret_access_key=self.secret_key,
+                region_name=self.region,
+                config=Config(signature_version="s3v4"),
+            )
+
+            # Ensure bucket exists
+            self._ensure_bucket_exists()
+            self.available = True
+        except Exception as e:
+            print(f"Storage service not available: {e}")
 
     def _ensure_bucket_exists(self) -> None:
         """Create bucket if it doesn't exist"""
@@ -106,6 +116,11 @@ class StorageService:
         Raises:
             HTTPException: If upload fails
         """
+        # Check if storage is available
+        if not self.available or not self.s3_client:
+            # Return empty values if storage is not available
+            return None, None
+
         # Generate image hash for deduplication
         image_hash = self.generate_image_hash(image_data)
 
