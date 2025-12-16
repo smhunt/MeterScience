@@ -341,6 +341,47 @@ web/
 
 ---
 
+## Session: OCR Filtering + Learning Plan
+**Date:** 2025-12-15
+
+### Completed
+
+#### Strict OCR Filtering ✅
+- [x] Filter OCR candidates to exact meter digit count only
+- [x] Fetch historical readings when scanner opens
+- [x] Plausibility filter: reject readings outside 95%-150% of last value
+- [x] Fall back to all digit-correct candidates if all filtered
+- [x] Clear logging for debugging OCR decisions
+
+#### OCR Test Harness ✅
+- [x] Created `test-images/test_ocr.py` for algorithm testing
+- [x] Simulated test cases for different meter types
+- [x] Validates digit count filtering
+- [x] Validates historical plausibility filtering
+
+#### Feature Planning ✅
+- [x] Documented OCR Learning System in `docs/feature-ocr-learning.md`
+- [x] Architecture for image pre-processing (rotation, ROI)
+- [x] Meter learning model design (per-meter params)
+- [x] Reference image system for guided OCR
+- [x] Batch training pipeline specification
+
+### Files Changed
+- `SmartScanView.swift` - Strict digit filtering, historical validation
+- `test-images/test_ocr.py` - OCR algorithm test harness
+- `docs/feature-ocr-learning.md` - Feature specification
+
+### Git Commits
+- `0fb2f35` Strict OCR filtering + learning feature plan
+
+### Next Steps
+1. Implement image rotation/orientation detection
+2. Add ROI detection for meter display
+3. Reference image capture UI
+4. Backend learning params API
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**
