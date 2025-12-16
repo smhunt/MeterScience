@@ -304,18 +304,38 @@ class APIKey(Base):
 
 class Webhook(Base):
     __tablename__ = "webhooks"
-    
+
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    
+
     url: Mapped[str] = mapped_column(String(500), nullable=False)
     events: Mapped[dict] = mapped_column(JSONB, nullable=False)
     secret: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    
+
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     failure_count: Mapped[int] = mapped_column(Integer, default=0)
     last_triggered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_success_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+
+    activity_type: Mapped[str] = mapped_column(String(50), nullable=False)  # reading, verification, xp_gain, badge_earned, level_up, streak
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Extra data like xp_amount, badge_name, etc.
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_activity_logs_user_id", "user_id"),
+        Index("idx_activity_logs_created_at", "created_at"),
+        Index("idx_activity_logs_activity_type", "activity_type"),
+    )

@@ -2,6 +2,7 @@
 Readings API endpoints
 """
 
+import base64
 from datetime import datetime, timezone
 from typing import Optional, List
 from uuid import UUID
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models import Reading, Meter, User, VerificationVote
 from ..services.auth import get_current_user
+from ..services.storage import storage_service
 
 router = APIRouter()
 
@@ -27,6 +29,7 @@ class ReadingCreate(BaseModel):
     confidence: float
     all_candidates: Optional[List[dict]] = None
     processing_ms: Optional[int] = None
+    image_data: Optional[str] = None  # Base64 encoded image
     image_hash: Optional[str] = None
     image_brightness: Optional[float] = None
     image_blur: Optional[float] = None
@@ -49,9 +52,10 @@ class ReadingResponse(BaseModel):
     verification_status: str
     usage_since_last: Optional[float]
     days_since_last: Optional[float]
+    image_url: Optional[str] = None
     captured_at: datetime
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -70,7 +74,7 @@ async def create_reading(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new meter reading"""
-    
+
     # Verify meter belongs to user
     meter_query = await db.execute(
         select(Meter).where(
@@ -78,12 +82,33 @@ async def create_reading(
         )
     )
     meter = meter_query.scalar_one_or_none()
-    
+
     if not meter:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Meter not found or doesn't belong to you"
         )
+
+    # Handle image upload if provided
+    image_url = None
+    image_hash = reading.image_hash
+
+    if reading.image_data:
+        try:
+            # Decode base64 image
+            image_bytes = base64.b64decode(reading.image_data)
+
+            # Upload to MinIO
+            image_url, image_hash = await storage_service.upload_image(
+                image_data=image_bytes,
+                user_id=current_user.id,
+                meter_id=reading.meter_id,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to process image: {str(e)}"
+            )
     
     # Get previous reading for usage calculation
     prev_query = await db.execute(
@@ -122,7 +147,8 @@ async def create_reading(
         confidence=reading.confidence,
         all_candidates=reading.all_candidates,
         processing_ms=reading.processing_ms,
-        image_hash=reading.image_hash,
+        image_hash=image_hash,
+        image_url=image_url,
         image_brightness=reading.image_brightness,
         image_blur=reading.image_blur,
         bounding_box=reading.bounding_box,
@@ -294,30 +320,49 @@ async def create_hardware_reading(
     db: AsyncSession = Depends(get_db)
 ):
     """Create reading from hardware device (MeterPi)"""
-    
+
     from ..models import Device
-    
+
     # Verify device
     device_query = await db.execute(
         select(Device).where(Device.device_id == device_id)
     )
     device = device_query.scalar_one_or_none()
-    
+
     if not device:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unknown device"
         )
-    
+
     # Get user from device
     user_query = await db.execute(
         select(User).where(User.id == device.user_id)
     )
     user = user_query.scalar_one_or_none()
-    
-    # Create reading (reuse create_reading logic)
-    # ... similar to above but with device context
-    
+
+    # Handle image upload if provided
+    image_url = None
+    image_hash = reading.image_hash
+
+    if reading.image_data:
+        try:
+            # Decode base64 image
+            image_bytes = base64.b64decode(reading.image_data)
+
+            # Upload to MinIO
+            image_url, image_hash = await storage_service.upload_image(
+                image_data=image_bytes,
+                user_id=device.user_id,
+                meter_id=reading.meter_id,
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to process image: {str(e)}"
+            )
+
+    # Create reading
     new_reading = Reading(
         meter_id=reading.meter_id,
         user_id=device.user_id,
@@ -325,19 +370,21 @@ async def create_hardware_reading(
         normalized_value=reading.normalized_value,
         numeric_value=reading.numeric_value,
         confidence=reading.confidence,
+        image_hash=image_hash,
+        image_url=image_url,
         capture_method="hardware",
         device_model=f"meterpi_{device.device_type}",
         app_version=device.firmware_version,
     )
-    
+
     db.add(new_reading)
-    
+
     # Update device status
     device.last_reading_at = datetime.now(timezone.utc)
     device.last_seen_at = datetime.now(timezone.utc)
     device.is_online = True
-    
+
     await db.commit()
     await db.refresh(new_reading)
-    
+
     return new_reading

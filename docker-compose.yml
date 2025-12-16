@@ -26,9 +26,15 @@ services:
       - REDIS_URL=redis://redis:6379
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=meterscience
+      - MINIO_SECRET_KEY=meterscience123
+      - MINIO_BUCKET=meter-images
+      - MINIO_REGION=us-east-1
     depends_on:
       - postgres
       - redis
+      - minio
     networks:
       - meterscience
 
