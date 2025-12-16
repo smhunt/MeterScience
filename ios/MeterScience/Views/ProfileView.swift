@@ -1311,6 +1311,17 @@ struct AccountActionsView: View {
                 )
             }
 
+            NavigationLink {
+                NotificationSettingsView()
+            } label: {
+                AccountActionRow(
+                    icon: "bell.fill",
+                    title: "Notifications",
+                    subtitle: "Manage push notifications",
+                    color: .orange
+                )
+            }
+
             Button {
                 showingVersionNotes = true
             } label: {
@@ -1372,6 +1383,226 @@ struct AccountActionRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Notification Settings View
+
+struct NotificationSettingsView: View {
+    @StateObject private var pushManager = PushNotificationManager.shared
+    @State private var preferences = NotificationPreferences()
+    @State private var isLoading = false
+    @State private var error: String?
+    @State private var showingSystemSettings = false
+
+    var body: some View {
+        List {
+            // Permission Status
+            Section {
+                HStack {
+                    Image(systemName: pushManager.isAuthorized ? "bell.badge.fill" : "bell.slash.fill")
+                        .foregroundStyle(pushManager.isAuthorized ? .green : .red)
+                        .font(.title2)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(pushManager.isAuthorized ? "Notifications Enabled" : "Notifications Disabled")
+                            .font(.headline)
+                        Text(pushManager.isAuthorized ? "You'll receive push notifications" : "Enable in Settings to receive notifications")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if !pushManager.isAuthorized {
+                        Button("Enable") {
+                            Task {
+                                let granted = await pushManager.requestPermissions()
+                                if !granted {
+                                    showingSystemSettings = true
+                                }
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                    }
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Text("Status")
+            }
+
+            // Notification Categories
+            Section {
+                NotificationToggle(
+                    icon: "gauge.with.dots.needle.bottom.50percent",
+                    title: "Reading Reminders",
+                    subtitle: "Daily reminders to log your meters",
+                    isOn: $preferences.readingsReminder,
+                    color: .blue
+                )
+
+                NotificationToggle(
+                    icon: "checkmark.shield.fill",
+                    title: "Verification Alerts",
+                    subtitle: "When your readings are verified",
+                    isOn: $preferences.verificationAlerts,
+                    color: .green
+                )
+
+                NotificationToggle(
+                    icon: "flame.fill",
+                    title: "Streak Reminders",
+                    subtitle: "Don't break your streak!",
+                    isOn: $preferences.streakReminders,
+                    color: .orange
+                )
+
+                NotificationToggle(
+                    icon: "person.3.fill",
+                    title: "Campaign Updates",
+                    subtitle: "News from campaigns you've joined",
+                    isOn: $preferences.campaignUpdates,
+                    color: .purple
+                )
+
+                NotificationToggle(
+                    icon: "trophy.fill",
+                    title: "Achievement Alerts",
+                    subtitle: "Badges, level-ups, and milestones",
+                    isOn: $preferences.achievementAlerts,
+                    color: .yellow
+                )
+            } header: {
+                Text("Categories")
+            } footer: {
+                Text("Choose which notifications you'd like to receive")
+            }
+
+            // Weekly Digest
+            Section {
+                NotificationToggle(
+                    icon: "envelope.fill",
+                    title: "Weekly Digest",
+                    subtitle: "Summary of your meter activity",
+                    isOn: $preferences.weeklyDigest,
+                    color: .cyan
+                )
+
+                NotificationToggle(
+                    icon: "megaphone.fill",
+                    title: "Tips & Updates",
+                    subtitle: "News and helpful tips",
+                    isOn: $preferences.marketingNotifications,
+                    color: .pink
+                )
+            } header: {
+                Text("Digests")
+            }
+        }
+        .navigationTitle("Notifications")
+        .navigationBarTitleDisplayMode(.inline)
+        .disabled(!pushManager.isAuthorized)
+        .opacity(pushManager.isAuthorized ? 1 : 0.6)
+        .task {
+            await loadPreferences()
+        }
+        .onChange(of: preferences) { _, newValue in
+            Task {
+                await savePreferences()
+            }
+        }
+        .alert("Enable Notifications", isPresented: $showingSystemSettings) {
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Please enable notifications in Settings to receive alerts about your meter readings and achievements.")
+        }
+    }
+
+    private func loadPreferences() async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let response = try await APIService.shared.getNotificationPreferences()
+            preferences = NotificationPreferences(from: response)
+        } catch {
+            // Use defaults if not set yet
+            print("Could not load notification preferences: \(error)")
+        }
+    }
+
+    private func savePreferences() async {
+        let request = NotificationPreferencesRequest(
+            readingsReminder: preferences.readingsReminder,
+            verificationAlerts: preferences.verificationAlerts,
+            streakReminders: preferences.streakReminders,
+            campaignUpdates: preferences.campaignUpdates,
+            achievementAlerts: preferences.achievementAlerts,
+            weeklyDigest: preferences.weeklyDigest,
+            marketingNotifications: preferences.marketingNotifications
+        )
+
+        do {
+            _ = try await APIService.shared.updateNotificationPreferences(request)
+        } catch {
+            print("Could not save notification preferences: \(error)")
+        }
+    }
+}
+
+struct NotificationToggle: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+    let color: Color
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .foregroundStyle(color)
+                    .font(.title3)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline.weight(.medium))
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .tint(.orange)
+    }
+}
+
+struct NotificationPreferences: Equatable {
+    var readingsReminder: Bool = true
+    var verificationAlerts: Bool = true
+    var streakReminders: Bool = true
+    var campaignUpdates: Bool = true
+    var achievementAlerts: Bool = true
+    var weeklyDigest: Bool = false
+    var marketingNotifications: Bool = false
+
+    init() {}
+
+    init(from response: NotificationPreferencesResponse) {
+        readingsReminder = response.readingsReminder
+        verificationAlerts = response.verificationAlerts
+        streakReminders = response.streakReminders
+        campaignUpdates = response.campaignUpdates
+        achievementAlerts = response.achievementAlerts
+        weeklyDigest = response.weeklyDigest
+        marketingNotifications = response.marketingNotifications
     }
 }
 
