@@ -34,6 +34,7 @@ class MeterCreate(BaseModel):
 
 class MeterUpdate(BaseModel):
     name: Optional[str] = None
+    meter_type: Optional[str] = None
     utility_provider: Optional[str] = None
     account_number: Optional[str] = None
     postal_code: Optional[str] = None
@@ -186,6 +187,15 @@ async def update_meter(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Meter not found"
         )
+
+    # Validate meter_type if provided
+    if meter_update.meter_type is not None:
+        valid_types = ["electric", "gas", "water", "solar", "other"]
+        if meter_update.meter_type not in valid_types:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid meter_type. Must be one of: {', '.join(valid_types)}"
+            )
 
     # Update fields
     update_data = meter_update.model_dump(exclude_unset=True)

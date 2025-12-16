@@ -366,6 +366,8 @@ struct MeterDetailView: View {
         }
         .onAppear {
             viewModel.meterName = meter.name
+            viewModel.meterType = meter.meterType
+            viewModel.digitCount = meter.digitCount
             viewModel.postalCode = meter.postalCode ?? ""
         }
     }
@@ -459,6 +461,8 @@ class MeterDetailViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var meterName = ""
+    @Published var meterType = "electric"
+    @Published var digitCount = 6
     @Published var postalCode = ""
     @Published var isSaving = false
 
@@ -482,6 +486,8 @@ class MeterDetailViewModel: ObservableObject {
             _ = try await APIService.shared.updateMeter(
                 id: meterId,
                 name: meterName,
+                meterType: meterType,
+                digitCount: digitCount,
                 postalCode: postalCode.isEmpty ? nil : postalCode
             )
             return true
@@ -499,25 +505,21 @@ struct EditMeterView: View {
     @ObservedObject var viewModel: MeterDetailViewModel
     @Environment(\.dismiss) private var dismiss
 
+    private let meterTypes = ["electric", "gas", "water", "solar", "other"]
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Meter Details") {
                     TextField("Meter Name", text: $viewModel.meterName)
 
-                    HStack {
-                        Text("Type")
-                        Spacer()
-                        Text(meter.meterType.capitalized)
-                            .foregroundStyle(.secondary)
+                    Picker("Type", selection: $viewModel.meterType) {
+                        ForEach(meterTypes, id: \.self) { type in
+                            Text(type.capitalized).tag(type)
+                        }
                     }
 
-                    HStack {
-                        Text("Digits")
-                        Spacer()
-                        Text("\(meter.digitCount)")
-                            .foregroundStyle(.secondary)
-                    }
+                    Stepper("Digits: \(viewModel.digitCount)", value: $viewModel.digitCount, in: 4...8)
                 }
 
                 Section("Location") {

@@ -158,8 +158,8 @@ actor APIService {
         try await request("/meters/\(id)")
     }
 
-    func updateMeter(id: UUID, name: String?, postalCode: String?) async throws -> MeterResponse {
-        let body = UpdateMeterRequest(name: name, postalCode: postalCode)
+    func updateMeter(id: UUID, name: String?, meterType: String?, digitCount: Int?, postalCode: String?) async throws -> MeterResponse {
+        let body = UpdateMeterRequest(name: name, meterType: meterType, digitCount: digitCount, postalCode: postalCode)
         return try await request("/meters/\(id)", method: "PATCH", body: body)
     }
 
@@ -320,7 +320,16 @@ struct CreateMeterRequest: Encodable {
 
 struct UpdateMeterRequest: Encodable {
     let name: String?
+    let meterType: String?
+    let digitCount: Int?
     let postalCode: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case meterType = "meter_type"
+        case digitCount = "digit_count"
+        case postalCode = "postal_code"
+    }
 }
 
 struct ReadingsListResponse: Decodable {
