@@ -273,15 +273,19 @@ struct LeaderboardEntry: Codable, Identifiable {
 
 // MARK: - Activity Log
 
-struct ActivityItem: Identifiable {
+struct ActivityItem: Identifiable, Codable {
     let id: UUID
     let type: ActivityType
     let timestamp: Date
     let title: String
     let subtitle: String?
     let icon: String
-    let color: Color
+    let color: CodableColor
     let metadata: ActivityMetadata?
+
+    var displayColor: Color {
+        color.color
+    }
 
     init(id: UUID = UUID(), type: ActivityType, timestamp: Date, title: String, subtitle: String? = nil, metadata: ActivityMetadata? = nil) {
         self.id = id
@@ -295,40 +299,93 @@ struct ActivityItem: Identifiable {
         switch type {
         case .readingSubmitted:
             self.icon = "camera.viewfinder"
-            self.color = .blue
+            self.color = CodableColor(.blue)
         case .verificationPerformed:
             self.icon = "checkmark.seal.fill"
-            self.color = .green
+            self.color = CodableColor(.green)
         case .xpEarned:
             self.icon = "star.fill"
-            self.color = .yellow
+            self.color = CodableColor(.yellow)
         case .badgeEarned:
             self.icon = "trophy.fill"
-            self.color = .orange
+            self.color = CodableColor(.orange)
         case .levelUp:
             self.icon = "arrow.up.circle.fill"
-            self.color = .purple
+            self.color = CodableColor(.purple)
         case .streakMilestone:
             self.icon = "flame.fill"
-            self.color = .orange
+            self.color = CodableColor(.orange)
         case .campaignJoined:
             self.icon = "flag.fill"
-            self.color = .indigo
+            self.color = CodableColor(.indigo)
+        }
+    }
+
+    // Create from API response
+    static func from(response: ActivityItemResponse) -> ActivityItem {
+        let activityType = ActivityType.from(string: response.activityType)
+        let metadata = response.metadata.map { ActivityMetadata.from(response: $0) }
+
+        return ActivityItem(
+            id: response.id,
+            type: activityType,
+            timestamp: response.createdAt,
+            title: response.title,
+            subtitle: response.description,
+            metadata: metadata
+        )
+    }
+}
+
+enum ActivityType: String, Codable {
+    case readingSubmitted = "reading_submitted"
+    case verificationPerformed = "verification_performed"
+    case xpEarned = "xp_earned"
+    case badgeEarned = "badge_earned"
+    case levelUp = "level_up"
+    case streakMilestone = "streak_milestone"
+    case campaignJoined = "campaign_joined"
+
+    static func from(string: String) -> ActivityType {
+        ActivityType(rawValue: string) ?? .readingSubmitted
+    }
+}
+
+// Wrapper to make Color Codable
+struct CodableColor: Codable {
+    let red: Double
+    let green: Double
+    let blue: Double
+    let opacity: Double
+
+    var color: Color {
+        Color(red: red, green: green, blue: blue, opacity: opacity)
+    }
+
+    init(_ color: Color) {
+        // Default color component values
+        // Note: This is a simplified implementation
+        // SwiftUI Color doesn't expose its components easily
+        switch color {
+        case .blue:
+            self.red = 0.0; self.green = 0.478; self.blue = 1.0; self.opacity = 1.0
+        case .green:
+            self.red = 0.0; self.green = 1.0; self.blue = 0.0; self.opacity = 1.0
+        case .yellow:
+            self.red = 1.0; self.green = 1.0; self.blue = 0.0; self.opacity = 1.0
+        case .orange:
+            self.red = 1.0; self.green = 0.584; self.blue = 0.0; self.opacity = 1.0
+        case .purple:
+            self.red = 0.686; self.green = 0.322; self.blue = 0.871; self.opacity = 1.0
+        case .indigo:
+            self.red = 0.345; self.green = 0.337; self.blue = 0.839; self.opacity = 1.0
+        default:
+            self.red = 0.5; self.green = 0.5; self.blue = 0.5; self.opacity = 1.0
         }
     }
 }
 
-enum ActivityType {
-    case readingSubmitted
-    case verificationPerformed
-    case xpEarned
-    case badgeEarned
-    case levelUp
-    case streakMilestone
-    case campaignJoined
-}
-
-struct ActivityMetadata {
+struct ActivityMetadata: Codable {
     let readingValue: String?
     let meterName: String?
     let xpAmount: Int?
@@ -353,5 +410,18 @@ struct ActivityMetadata {
         self.newLevel = newLevel
         self.streakDays = streakDays
         self.campaignName = campaignName
+    }
+
+    // Create from API response
+    static func from(response: ActivityMetadataResponse) -> ActivityMetadata {
+        ActivityMetadata(
+            readingValue: response.readingValue,
+            meterName: response.meterName,
+            xpAmount: response.xpAmount,
+            badgeIcon: response.badgeIcon,
+            newLevel: response.newLevel,
+            streakDays: response.streakDays,
+            campaignName: response.campaignName
+        )
     }
 }

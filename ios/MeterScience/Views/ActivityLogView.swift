@@ -72,9 +72,9 @@ struct ActivityRow: View {
             // Icon
             Image(systemName: activity.icon)
                 .font(.title3)
-                .foregroundStyle(activity.color)
+                .foregroundStyle(activity.displayColor)
                 .frame(width: 40, height: 40)
-                .background(activity.color.opacity(0.1))
+                .background(activity.displayColor.opacity(0.1))
                 .clipShape(Circle())
 
             // Content
@@ -209,6 +209,8 @@ class ActivityLogViewModel: ObservableObject {
     @Published var activities: [ActivityItem] = []
     @Published var isLoading = false
     @Published var error: String?
+    @Published var currentPage = 1
+    @Published var hasMorePages = true
 
     var groupedActivities: [Date: [ActivityItem]] {
         let calendar = Calendar.current
@@ -222,6 +224,34 @@ class ActivityLogViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
+        do {
+            // Try to load from API first
+            let response = try await APIService.shared.getActivity(page: currentPage)
+
+            // Convert API response to ActivityItem models
+            let newActivities = response.activities.map { ActivityItem.from(response: $0) }
+
+            // Update pagination info
+            hasMorePages = (response.page * response.perPage) < response.total
+
+            // Sort by timestamp (newest first)
+            activities = newActivities.sorted { $0.timestamp > $1.timestamp }
+
+        } catch APIError.notFound {
+            // Activity endpoint not implemented yet, fall back to local generation
+            print("Activity endpoint not found, using fallback local generation")
+            await loadActivitiesFallback()
+        } catch {
+            self.error = error.localizedDescription
+            print("Failed to load activities: \(error)")
+
+            // Try fallback on error
+            await loadActivitiesFallback()
+        }
+    }
+
+    // Fallback method using existing endpoints
+    private func loadActivitiesFallback() async {
         do {
             // Load data from multiple sources
             async let readingsTask = APIService.shared.getReadings()
@@ -312,7 +342,7 @@ class ActivityLogViewModel: ObservableObject {
 
         } catch {
             self.error = error.localizedDescription
-            print("Failed to load activities: \(error)")
+            print("Failed to load activities (fallback): \(error)")
         }
     }
 

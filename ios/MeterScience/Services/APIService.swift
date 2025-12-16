@@ -228,6 +228,12 @@ actor APIService {
     func getVerificationHistory() async throws -> VerificationHistoryResponse {
         try await request("/verify/history")
     }
+
+    // MARK: - Activity
+
+    func getActivity(page: Int = 1) async throws -> ActivityListResponse {
+        try await request("/activity/?page=\(page)")
+    }
 }
 
 // MARK: - Request/Response Models
@@ -482,6 +488,39 @@ struct VerificationHistoryResponse: Decodable {
 
 struct APIErrorResponse: Decodable {
     let detail: String
+}
+
+struct ActivityListResponse: Decodable {
+    let activities: [ActivityItemResponse]
+    let total: Int
+    let page: Int
+    let perPage: Int
+}
+
+struct ActivityItemResponse: Decodable, Identifiable {
+    let id: UUID
+    let userId: UUID
+    let activityType: String
+    let title: String
+    let description: String?
+    let metadata: ActivityMetadataResponse?
+    let xpEarned: Int?
+    let createdAt: Date
+}
+
+struct ActivityMetadataResponse: Decodable {
+    let readingValue: String?
+    let meterName: String?
+    let meterId: String?
+    let xpAmount: Int?
+    let badgeId: String?
+    let badgeName: String?
+    let badgeIcon: String?
+    let newLevel: Int?
+    let streakDays: Int?
+    let campaignName: String?
+    let campaignId: String?
+    let verificationVote: String?
 }
 
 // MARK: - Errors
