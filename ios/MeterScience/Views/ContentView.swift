@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let readingsDidChange = Notification.Name("readingsDidChange")
+}
+
 struct ContentView: View {
     @StateObject private var auth = AuthManager.shared
 
@@ -66,6 +70,12 @@ struct MainTabView: View {
         }
         .fullScreenCover(item: $selectedMeter) { meter in
             SmartScanView(meter: meter)
+        }
+        .onChange(of: selectedMeter) { oldValue, newValue in
+            // When SmartScanView is dismissed (selectedMeter becomes nil), post notification to refresh
+            if oldValue != nil && newValue == nil {
+                NotificationCenter.default.post(name: .readingsDidChange, object: nil)
+            }
         }
     }
 }
@@ -225,6 +235,7 @@ struct MeterDetailView: View {
 
     @StateObject private var viewModel = MeterDetailViewModel()
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView {
@@ -335,6 +346,11 @@ struct MeterDetailView: View {
         }
         .refreshable {
             await viewModel.loadReadings(meterId: meter.id)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .readingsDidChange)) { _ in
+            Task {
+                await viewModel.loadReadings(meterId: meter.id)
+            }
         }
     }
 
