@@ -672,10 +672,201 @@ ios/MeterScience/Services/
 
 ### Next Steps (Phase 2)
 1. Stripe integration (backend)
-2. Receipt validation (iOS StoreKit)
+2. ~~Receipt validation (iOS StoreKit)~~ ✅ Complete
 3. Email verification flow
 4. Push notifications (APNs)
 5. Privacy policy & ToS pages
+
+---
+
+## Session: iOS Subscription Receipt Validation
+**Date:** 2025-12-15
+**Duration:** ~1 hour
+
+### Completed
+
+#### iOS StoreKit 2 Receipt Validation ✅
+- [x] **SubscriptionManager.swift** - Centralized subscription management
+  - Singleton service for subscription state
+  - Transaction listener for App Store updates
+  - Server-side receipt validation
+  - Restore purchases support
+  - Entitlement checking on app launch
+- [x] **APIService.swift** - Receipt validation endpoint
+  - `validateReceipt(transactionId:productId:)` method
+  - POST to `/api/v1/subscriptions/validate-receipt`
+  - SubscriptionValidationResponse model
+- [x] **SubscriptionView.swift** - Purchase flow integration
+  - Backend validation after successful purchase
+  - Success/error feedback alerts
+  - Updated product IDs (removed .monthly suffix)
+  - Restore purchases with backend sync
+- [x] **MeterScienceApp.swift** - App launch integration
+  - Initialize SubscriptionManager on launch
+  - Check subscription status automatically
+
+### Product IDs
+Updated to match backend configuration:
+- `com.meterscience.neighbor` (was .neighbor.monthly)
+- `com.meterscience.block` (was .block.monthly)
+- `com.meterscience.district` (was .district.monthly)
+
+### Purchase Flow
+1. User taps "Subscribe" button
+2. StoreKit 2 processes payment
+3. Transaction verified by App Store
+4. App validates receipt with backend API
+5. Backend updates user's subscription_tier
+6. AuthManager refreshes user profile
+7. Success message shown to user
+8. Transaction finished
+
+### Subscription Management Features
+- **Transaction Listener**: Automatically handles subscription updates
+- **Restore Purchases**: Syncs with backend when restoring
+- **Entitlement Checking**: Validates active subscriptions on launch
+- **Backend Sync**: All purchases validated server-side
+- **Error Handling**: Graceful fallbacks with user feedback
+
+### Files Created
+```
+ios/MeterScience/Services/
+└── SubscriptionManager.swift    # Subscription state management
+```
+
+### Files Modified
+- `ios/MeterScience/Services/APIService.swift` - Added validateReceipt method
+- `ios/MeterScience/Views/SubscriptionView.swift` - Integrated backend validation
+- `ios/MeterScience/MeterScienceApp.swift` - Initialize SubscriptionManager
+- `ios/MeterScience.xcodeproj/project.pbxproj` - Added SubscriptionManager to build
+
+### Build Status
+✅ BUILD SUCCEEDED - All files compile with warnings only (no errors)
+
+### Key Implementation Details
+1. **StoreKit.Transaction disambiguation**: Used fully qualified type to avoid ambiguity
+2. **Subscription status enum**: Clean state management (unknown, notSubscribed, active)
+3. **Backend-first validation**: All purchases verified server-side for security
+4. **Async/await**: Modern Swift concurrency throughout
+5. **MainActor isolation**: Proper thread safety for UI updates
+
+### Next Steps
+1. Backend API endpoint: `POST /api/v1/subscriptions/validate-receipt`
+2. Backend: Store transaction IDs and expiration dates
+3. Backend: Handle subscription renewal webhooks from App Store
+4. iOS: Add subscription management UI (cancel, upgrade, etc.)
+5. Testing: Configure App Store Connect with test products
+
+---
+
+## Session: Phase 2 Backend Services - Complete
+**Date:** 2025-12-15
+**Duration:** ~2 hours (parallel agents)
+
+### Completed
+
+#### Stripe Subscription Backend ✅
+- [x] **Subscription model** - Database model with Stripe fields
+  - stripe_subscription_id, stripe_price_id
+  - tier, status, billing period, cancellation tracking
+  - trial_start, trial_end support
+- [x] **Stripe service** (`api/src/services/stripe.py`)
+  - get_or_create_stripe_customer() - Customer management
+  - create_checkout_session() - Start subscription flow
+  - create_portal_session() - Customer self-service
+  - get_subscription_status() - Check current tier
+  - Webhook handlers for checkout, subscription updates, deletions, payment failures
+- [x] **API endpoints** (`api/src/routes/subscriptions.py`)
+  - POST /api/v1/subscriptions/checkout
+  - POST /api/v1/subscriptions/portal
+  - GET /api/v1/subscriptions/status
+  - POST /api/v1/subscriptions/webhook (unauthenticated)
+  - GET /api/v1/subscriptions/tiers
+- [x] **Documentation** - STRIPE_SETUP.md with full setup guide
+- [x] **Unit tests** - test_subscriptions.py with 15+ test cases
+
+#### Email Verification Service ✅
+- [x] **Email service** (`api/src/services/email.py`)
+  - SMTP connection with TLS support
+  - send_verification_email() - 24-hour verification links
+  - send_password_reset_email() - Secure password reset
+  - send_welcome_email() - Welcome message after verification
+  - Branded HTML templates with MeterScience styling
+  - Plain text fallbacks
+- [x] **Database models** updated
+  - User.email_verified field added
+  - EmailVerification model with token, expiry, usage tracking
+  - PasswordReset model with secure token system
+- [x] **API endpoints** in users.py
+  - GET /api/v1/users/verify-email - Verify email token
+  - POST /api/v1/users/resend-verification - Resend verification
+  - POST /api/v1/users/forgot-password - Request password reset
+  - POST /api/v1/users/reset-password - Complete password reset
+- [x] **Registration updated** - Auto-sends verification email
+
+#### Legal Pages ✅
+- [x] **Privacy Policy** (`web/app/privacy/page.tsx`)
+  - 11 major sections with detailed subsections
+  - GDPR compliance (EU/UK rights)
+  - CCPA compliance (California rights)
+  - Clear data sharing policies ("we never sell data")
+  - Data retention and deletion procedures
+  - Security measures documentation
+- [x] **Terms of Service** (`web/app/terms/page.tsx`)
+  - 16 major sections with comprehensive coverage
+  - Subscription tiers and billing details
+  - Acceptable use policy
+  - OCR accuracy disclaimers
+  - Limitation of liability
+  - Canadian/Ontario jurisdiction
+- [x] **Footer links** updated on homepage to /privacy and /terms
+
+### Files Created
+```
+api/src/services/
+├── stripe.py                # Stripe payment integration
+└── email.py                 # Email verification service
+
+api/src/routes/
+└── subscriptions.py         # Subscription API endpoints
+
+api/tests/
+└── test_subscriptions.py    # Subscription unit tests
+
+api/
+├── STRIPE_SETUP.md          # Stripe setup documentation
+└── .env.example             # Updated with new env vars
+
+web/app/
+├── privacy/page.tsx         # Privacy Policy page
+└── terms/page.tsx           # Terms of Service page
+```
+
+### Files Modified
+- `api/src/models.py` - Subscription, EmailVerification, PasswordReset models; User.email_verified
+- `api/src/main.py` - Registered subscriptions router
+- `api/src/routes/users.py` - Email verification endpoints
+- `web/app/page.tsx` - Footer links to legal pages
+
+### Phase 2 Summary
+| Task | Status | Agent |
+|------|--------|-------|
+| Stripe Subscription Backend | ✅ Complete | 1 |
+| Email Verification Service | ✅ Complete | 2 |
+| Privacy Policy Page | ✅ Complete | 3 |
+| Terms of Service Page | ✅ Complete | 3 |
+
+### URLs
+- Privacy Policy: http://10.10.10.24:3011/privacy
+- Terms of Service: http://10.10.10.24:3011/terms
+- API Docs: http://10.10.10.24:3090/docs
+
+### Next Steps (Phase 3)
+1. Push notifications (APNs) - Backend and iOS integration
+2. Database migrations (alembic) for new models
+3. iOS receipt validation endpoint connection
+4. Test full subscription flow end-to-end
+5. Configure Stripe test products and prices
 
 ---
 

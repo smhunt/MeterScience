@@ -19,13 +19,14 @@ from .database import Base
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     avatar_emoji: Mapped[str] = mapped_column(String(10), default="📊")
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    
+
     # Gamification
     level: Mapped[int] = mapped_column(Integer, default=1)
     xp: Mapped[int] = mapped_column(Integer, default=0)
@@ -36,11 +37,11 @@ class User(Base):
     last_reading_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     trust_score: Mapped[int] = mapped_column(Integer, default=50)
     badges: Mapped[dict] = mapped_column(JSONB, default=list)
-    
-    # Subscription
+
+    # Subscription (legacy fields maintained for backward compatibility)
     subscription_tier: Mapped[str] = mapped_column(String(20), default="free")
     subscription_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
     
     # Referral
     referral_code: Mapped[Optional[str]] = mapped_column(String(10), unique=True, nullable=True)
@@ -339,3 +340,124 @@ class ActivityLog(Base):
         Index("idx_activity_logs_created_at", "created_at"),
         Index("idx_activity_logs_activity_type", "activity_type"),
     )
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True)
+
+    # Stripe details
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True)
+    stripe_price_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    # Subscription details
+    tier: Mapped[str] = mapped_column(String(20), nullable=False, default="free")  # free, neighbor, block, district
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")  # active, canceled, past_due, incomplete, trialing
+
+    # Billing period
+    current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False)
+    canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Trial
+    trial_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_subscriptions_user_id", "user_id"),
+        Index("idx_subscriptions_stripe_subscription_id", "stripe_subscription_id"),
+        Index("idx_subscriptions_status", "status"),
+    )
+
+
+class EmailVerification(Base):
+    __tablename__ = "email_verifications"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_email_verifications_token", "token"),
+        Index("idx_email_verifications_user_id", "user_id"),
+    )
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used: Mapped[bool] = mapped_column(Boolean, default=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_password_resets_token", "token"),
+        Index("idx_password_resets_user_id", "user_id"),
+    )
+
+
+class DeviceToken(Base):
+    """Push notification device tokens"""
+    __tablename__ = "device_tokens"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+
+    device_token: Mapped[str] = mapped_column(String(255), nullable=False)
+    device_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    device_model: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    os_version: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "device_token", name="unique_user_device"),
+        Index("idx_device_tokens_user_id", "user_id"),
+    )
+
+
+class NotificationPreference(Base):
+    """User notification preferences"""
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True)
+
+    # Notification types
+    reading_verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    verification_needed: Mapped[bool] = mapped_column(Boolean, default=True)
+    streak_reminder: Mapped[bool] = mapped_column(Boolean, default=True)
+    streak_milestone: Mapped[bool] = mapped_column(Boolean, default=True)
+    badge_earned: Mapped[bool] = mapped_column(Boolean, default=True)
+    level_up: Mapped[bool] = mapped_column(Boolean, default=True)
+    campaign_updates: Mapped[bool] = mapped_column(Boolean, default=True)
+    weekly_digest: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Quiet hours (UTC)
+    quiet_hours_start: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-23
+    quiet_hours_end: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0-23
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)

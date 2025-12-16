@@ -234,6 +234,13 @@ actor APIService {
     func getActivity(page: Int = 1) async throws -> ActivityListResponse {
         try await request("/activity/?page=\(page)")
     }
+
+    // MARK: - Subscriptions
+
+    func validateReceipt(transactionId: String, productId: String) async throws -> SubscriptionValidationResponse {
+        let body = ValidateReceiptRequest(transactionId: transactionId, productId: productId)
+        return try await request("/subscriptions/validate-receipt", method: "POST", body: body)
+    }
 }
 
 // MARK: - Request/Response Models
@@ -521,6 +528,18 @@ struct ActivityMetadataResponse: Decodable {
     let campaignName: String?
     let campaignId: String?
     let verificationVote: String?
+}
+
+struct ValidateReceiptRequest: Encodable {
+    let transactionId: String
+    let productId: String
+}
+
+struct SubscriptionValidationResponse: Decodable {
+    let success: Bool
+    let subscriptionTier: String
+    let expiresAt: Date?
+    let productId: String
 }
 
 // MARK: - Errors

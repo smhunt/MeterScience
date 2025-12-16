@@ -3,8 +3,11 @@ import StoreKit
 
 struct SubscriptionView: View {
     @StateObject private var store = SubscriptionStore()
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
     @StateObject private var auth = AuthManager.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var showSuccessMessage = false
+    @State private var successMessage = ""
 
     var body: some View {
         ScrollView {
@@ -18,13 +21,35 @@ struct SubscriptionView: View {
                         tier: tier,
                         isCurrentTier: auth.currentUser?.subscriptionTier.lowercased() == tier.rawValue,
                         product: store.product(for: tier),
-                        onSubscribe: { await store.purchase(tier) }
+                        onSubscribe: {
+                            await store.purchase(tier) { transaction in
+                                // Validate with backend after purchase
+                                Task {
+                                    do {
+                                        try await subscriptionManager.validateTransaction(transaction)
+                                        await transaction.finish()
+
+                                        // Show success message
+                                        successMessage = "Subscription activated successfully!"
+                                        showSuccessMessage = true
+
+                                    } catch {
+                                        store.errorMessage = "Failed to activate subscription: \(error.localizedDescription)"
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
 
                 // Restore Purchases
                 Button {
-                    Task { await store.restorePurchases() }
+                    Task {
+                        await store.restorePurchases {
+                            successMessage = "Purchases restored successfully!"
+                            showSuccessMessage = true
+                        }
+                    }
                 } label: {
                     Text("Restore Purchases")
                         .font(.footnote)
@@ -46,6 +71,13 @@ struct SubscriptionView: View {
             Button("OK") { store.errorMessage = nil }
         } message: {
             Text(store.errorMessage ?? "")
+        }
+        .alert("Success", isPresented: $showSuccessMessage) {
+            Button("OK") {
+                showSuccessMessage = false
+            }
+        } message: {
+            Text(successMessage)
         }
         .overlay {
             if store.isLoading {
@@ -71,10 +103,11 @@ class SubscriptionStore: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    // Updated product IDs to match backend configuration
     private let productIDs = [
-        "com.meterscience.neighbor.monthly",
-        "com.meterscience.block.monthly",
-        "com.meterscience.district.monthly"
+        "com.meterscience.neighbor",
+        "com.meterscience.block",
+        "com.meterscience.district"
     ]
 
     private var updateListenerTask: Task<Void, Error>?
@@ -100,14 +133,14 @@ class SubscriptionStore: ObservableObject {
         let productID: String
         switch tier {
         case .free: return nil
-        case .neighbor: productID = "com.meterscience.neighbor.monthly"
-        case .block: productID = "com.meterscience.block.monthly"
-        case .district: productID = "com.meterscience.district.monthly"
+        case .neighbor: productID = "com.meterscience.neighbor"
+        case .block: productID = "com.meterscience.block"
+        case .district: productID = "com.meterscience.district"
         }
         return products.first { $0.id == productID }
     }
 
-    func purchase(_ tier: SubscriptionTier) async {
+    func purchase(_ tier: SubscriptionTier, onSuccess: @escaping (StoreKit.Transaction) -> Void) async {
         guard let product = product(for: tier) else {
             errorMessage = "Product not available"
             return
@@ -123,7 +156,12 @@ class SubscriptionStore: ObservableObject {
             case .success(let verification):
                 let transaction = try checkVerified(verification)
                 await updatePurchasedProducts()
-                await transaction.finish()
+
+                // Call success callback before finishing transaction
+                onSuccess(transaction)
+
+                // Don't finish transaction yet - let SubscriptionManager handle it after backend validation
+                // await transaction.finish()
 
             case .userCancelled:
                 break
@@ -139,13 +177,14 @@ class SubscriptionStore: ObservableObject {
         }
     }
 
-    func restorePurchases() async {
+    func restorePurchases(onSuccess: @escaping () -> Void) async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            try await AppStore.sync()
+            try await SubscriptionManager.shared.restorePurchases()
             await updatePurchasedProducts()
+            onSuccess()
         } catch {
             errorMessage = "Restore failed: \(error.localizedDescription)"
         }

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 import uvicorn
 
 from .database import engine, get_db, Base
-from .routes import readings, users, meters, campaigns, verify, stats, webhooks, activity
+from .routes import readings, users, meters, campaigns, verify, stats, webhooks, activity, subscriptions, notifications
 from .services.auth import verify_token, get_current_user
 from .models import User
 
@@ -56,6 +56,8 @@ app.include_router(verify.router, prefix="/api/v1/verify", tags=["Verification"]
 app.include_router(stats.router, prefix="/api/v1/stats", tags=["Statistics"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["Webhooks"])
 app.include_router(activity.router, prefix="/api/v1/activity", tags=["Activity"])
+app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["Subscriptions"])
+app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["Notifications"])
 
 
 @app.get("/")
@@ -90,6 +92,8 @@ async def api_info():
             "stats": "/api/v1/stats",
             "webhooks": "/api/v1/webhooks",
             "activity": "/api/v1/activity",
+            "subscriptions": "/api/v1/subscriptions",
+            "notifications": "/api/v1/notifications",
         }
     }
 

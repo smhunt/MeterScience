@@ -2,9 +2,10 @@
 Users API endpoints
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID, uuid4
+import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr
@@ -12,8 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..models import User
+from ..models import User, EmailVerification, PasswordReset
 from ..services.auth import get_current_user, create_access_token, hash_password, verify_password
+from ..services.email import send_verification_email, send_password_reset_email, send_welcome_email
 
 router = APIRouter()
 
@@ -77,7 +79,7 @@ async def register(
     db: AsyncSession = Depends(get_db)
 ):
     """Register a new user"""
-    
+
     # Check if email exists
     if user_data.email:
         existing = await db.execute(
@@ -88,7 +90,7 @@ async def register(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
-    
+
     # Generate unique referral code
     referral_code = generate_referral_code()
     while True:
@@ -98,7 +100,7 @@ async def register(
         if not check.scalar_one_or_none():
             break
         referral_code = generate_referral_code()
-    
+
     # Create user
     user = User(
         email=user_data.email,
@@ -106,14 +108,34 @@ async def register(
         password_hash=hash_password(user_data.password) if user_data.password else None,
         referral_code=referral_code,
     )
-    
+
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    
+
+    # Send verification email if email provided
+    if user.email:
+        # Generate verification token
+        verification_token = secrets.token_urlsafe(32)
+        verification = EmailVerification(
+            user_id=user.id,
+            token=verification_token,
+            expires_at=datetime.utcnow() + timedelta(hours=24)
+        )
+        db.add(verification)
+        await db.commit()
+
+        # Send email (non-blocking, failures logged but don't stop registration)
+        try:
+            send_verification_email(user.email, verification_token)
+        except Exception as e:
+            # Log error but don't fail registration
+            import logging
+            logging.error(f"Failed to send verification email: {e}")
+
     # Generate token
     token = create_access_token({"sub": str(user.id)})
-    
+
     return TokenResponse(access_token=token, user=user)
 
 
@@ -258,3 +280,219 @@ async def get_leaderboard(
         }
         for i, u in enumerate(users)
     ]
+
+
+@router.get("/verify-email")
+async def verify_email(
+    token: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Verify email address with token"""
+
+    # Find verification token
+    result = await db.execute(
+        select(EmailVerification).where(EmailVerification.token == token)
+    )
+    verification = result.scalar_one_or_none()
+
+    if not verification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid verification token"
+        )
+
+    # Check if already used
+    if verification.used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token already used"
+        )
+
+    # Check if expired
+    if verification.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token expired"
+        )
+
+    # Get user
+    user_result = await db.execute(
+        select(User).where(User.id == verification.user_id)
+    )
+    user = user_result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Mark email as verified
+    user.email_verified = True
+    verification.used = True
+    verification.used_at = datetime.utcnow()
+
+    await db.commit()
+
+    # Send welcome email
+    if user.email:
+        try:
+            send_welcome_email(user.email, user.display_name)
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to send welcome email: {e}")
+
+    return {"message": "Email verified successfully"}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Resend verification email"""
+
+    # Check if already verified
+    if current_user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already verified"
+        )
+
+    # Check if email exists
+    if not current_user.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No email associated with account"
+        )
+
+    # Invalidate old tokens
+    await db.execute(
+        select(EmailVerification)
+        .where(EmailVerification.user_id == current_user.id)
+        .where(EmailVerification.used == False)
+    )
+
+    # Generate new verification token
+    verification_token = secrets.token_urlsafe(32)
+    verification = EmailVerification(
+        user_id=current_user.id,
+        token=verification_token,
+        expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    db.add(verification)
+    await db.commit()
+
+    # Send email
+    try:
+        send_verification_email(current_user.email, verification_token)
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to send verification email: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email"
+        )
+
+    return {"message": "Verification email sent"}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Request password reset email"""
+
+    # Find user by email
+    result = await db.execute(
+        select(User).where(User.email == request.email)
+    )
+    user = result.scalar_one_or_none()
+
+    # Always return success to prevent email enumeration
+    if not user:
+        return {"message": "If email exists, password reset link has been sent"}
+
+    # Generate reset token
+    reset_token = secrets.token_urlsafe(32)
+    reset = PasswordReset(
+        user_id=user.id,
+        token=reset_token,
+        expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    db.add(reset)
+    await db.commit()
+
+    # Send email
+    try:
+        send_password_reset_email(user.email, reset_token, user.display_name)
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to send password reset email: {e}")
+
+    return {"message": "If email exists, password reset link has been sent"}
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Reset password with token"""
+
+    # Find reset token
+    result = await db.execute(
+        select(PasswordReset).where(PasswordReset.token == request.token)
+    )
+    reset = result.scalar_one_or_none()
+
+    if not reset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid reset token"
+        )
+
+    # Check if already used
+    if reset.used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token already used"
+        )
+
+    # Check if expired
+    if reset.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token expired"
+        )
+
+    # Get user
+    user_result = await db.execute(
+        select(User).where(User.id == reset.user_id)
+    )
+    user = user_result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Update password
+    user.password_hash = hash_password(request.new_password)
+    reset.used = True
+    reset.used_at = datetime.utcnow()
+
+    await db.commit()
+
+    return {"message": "Password reset successfully"}

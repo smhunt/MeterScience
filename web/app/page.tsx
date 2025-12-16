@@ -654,9 +654,9 @@ export default function Home() {
           <div className="border-t border-gray-800 pt-8 text-center text-sm">
             <p>© 2025 MeterScience. Your data is always yours.</p>
             <p className="mt-2">
-              <a href="#" className="hover:text-white transition">Privacy Policy</a>
+              <a href="/privacy" className="hover:text-white transition">Privacy Policy</a>
               {' · '}
-              <a href="#" className="hover:text-white transition">Terms of Service</a>
+              <a href="/terms" className="hover:text-white transition">Terms of Service</a>
             </p>
           </div>
         </div>
