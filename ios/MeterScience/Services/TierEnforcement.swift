@@ -198,7 +198,16 @@ enum StatsScope: String, CaseIterable {
     }
 
     var requiredTier: SubscriptionTier {
-        TierEnforcement.shared.requiredTierForScope(self)
+        switch self {
+        case .own:
+            return .free
+        case .postalCode:
+            return .neighbor
+        case .radius5km:
+            return .block
+        case .radius25km:
+            return .district
+        }
     }
 }
 

@@ -241,6 +241,20 @@ actor APIService {
         let body = ValidateReceiptRequest(transactionId: transactionId, productId: productId)
         return try await request("/subscriptions/validate-receipt", method: "POST", body: body)
     }
+
+    // MARK: - Push Notifications
+
+    func registerDevice(_ request: RegisterDeviceRequest) async throws -> DeviceResponse {
+        try await self.request("/notifications/devices", method: "POST", body: request)
+    }
+
+    func updateNotificationPreferences(_ preferences: NotificationPreferencesRequest) async throws -> NotificationPreferencesResponse {
+        try await request("/notifications/preferences", method: "PUT", body: preferences)
+    }
+
+    func getNotificationPreferences() async throws -> NotificationPreferencesResponse {
+        try await request("/notifications/preferences")
+    }
 }
 
 // MARK: - Request/Response Models
@@ -540,6 +554,28 @@ struct SubscriptionValidationResponse: Decodable {
     let subscriptionTier: String
     let expiresAt: Date?
     let productId: String
+}
+
+struct NotificationPreferencesRequest: Encodable {
+    let readingsReminder: Bool?
+    let verificationAlerts: Bool?
+    let streakReminders: Bool?
+    let campaignUpdates: Bool?
+    let achievementAlerts: Bool?
+    let weeklyDigest: Bool?
+    let marketingNotifications: Bool?
+}
+
+struct NotificationPreferencesResponse: Decodable {
+    let userId: UUID
+    let readingsReminder: Bool
+    let verificationAlerts: Bool
+    let streakReminders: Bool
+    let campaignUpdates: Bool
+    let achievementAlerts: Bool
+    let weeklyDigest: Bool
+    let marketingNotifications: Bool
+    let updatedAt: Date
 }
 
 // MARK: - Errors
