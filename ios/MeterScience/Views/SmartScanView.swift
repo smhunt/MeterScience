@@ -1,10 +1,12 @@
 import SwiftUI
 import AVFoundation
 import Vision
+import CoreLocation
 
 struct SmartScanView: View {
     let meter: MeterResponse
     @StateObject private var viewModel: SmartScanViewModel
+    @StateObject private var locationManager = LocationManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingCamera = false
 
@@ -129,6 +131,18 @@ struct SmartScanView: View {
             Button("OK") { viewModel.errorMessage = nil }
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+        .onAppear {
+            // Request location permission when scanner opens
+            locationManager.requestPermission()
+
+            // Attempt to get current location
+            Task {
+                if let location = await locationManager.getCurrentLocation() {
+                    viewModel.capturedLocation = location
+                    print("[SmartScanView] Location captured: \(location.latitude), \(location.longitude)")
+                }
+            }
         }
     }
 }
@@ -343,7 +357,11 @@ class SmartScanViewModel: NSObject, ObservableObject {
     @Published var historicalReadings: [ReadingResponse] = []
     @Published var lastReadingValue: Double?
 
+    // GPS location
+    var capturedLocation: CLLocationCoordinate2D?
+
     private let textRecognizer = TextRecognizer()
+    private let imageProcessor = ImageProcessor()
 
     enum ScanState {
         case scanning
@@ -385,9 +403,16 @@ class SmartScanViewModel: NSObject, ObservableObject {
         isProcessing = true
 
         Task {
-            if let cgImage = image.cgImage {
-                let ciImage = CIImage(cgImage: cgImage)
-                await processImageAsync(ciImage, fromCapture: true)
+            // Preprocess image before OCR
+            if let preprocessedImage = await imageProcessor.preprocessForOCR(image) {
+                await processImageAsync(preprocessedImage, fromCapture: true)
+            } else {
+                // Fallback to original image if preprocessing fails
+                print("[SmartScanVM] Preprocessing failed, using original image")
+                if let cgImage = image.cgImage {
+                    let ciImage = CIImage(cgImage: cgImage)
+                    await processImageAsync(ciImage, fromCapture: true)
+                }
             }
             isProcessing = false
         }
@@ -412,7 +437,9 @@ class SmartScanViewModel: NSObject, ObservableObject {
                 rawValue: detectedReading,
                 normalizedValue: normalizedValue,
                 confidence: confidence,
-                source: "ocr"
+                source: "ocr",
+                latitude: capturedLocation?.latitude,
+                longitude: capturedLocation?.longitude
             )
             scanState = .confirmed
         } catch let error as APIError {
@@ -437,7 +464,9 @@ class SmartScanViewModel: NSObject, ObservableObject {
                 rawValue: manualReading,
                 normalizedValue: normalizedValue,
                 confidence: 1.0,
-                source: "manual"
+                source: "manual",
+                latitude: capturedLocation?.latitude,
+                longitude: capturedLocation?.longitude
             )
             scanState = .confirmed
             detectedReading = manualReading
