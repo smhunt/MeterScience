@@ -236,6 +236,7 @@ struct MeterDetailView: View {
     @StateObject private var viewModel = MeterDetailViewModel()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showingEditSheet = false
 
     var body: some View {
         ScrollView {
@@ -248,7 +249,7 @@ struct MeterDetailView: View {
                             .foregroundStyle(meterColor)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(meter.name)
+                            Text(viewModel.meterName.isEmpty ? meter.name : viewModel.meterName)
                                 .font(.title2.bold())
                             Text(meter.meterType.capitalized)
                                 .font(.subheadline)
@@ -256,6 +257,14 @@ struct MeterDetailView: View {
                         }
 
                         Spacer()
+
+                        Button {
+                            showingEditSheet = true
+                        } label: {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(meterColor)
+                        }
                     }
 
                     // Quick stats
@@ -352,6 +361,13 @@ struct MeterDetailView: View {
                 await viewModel.loadReadings(meterId: meter.id)
             }
         }
+        .sheet(isPresented: $showingEditSheet) {
+            EditMeterView(meter: meter, viewModel: viewModel)
+        }
+        .onAppear {
+            viewModel.meterName = meter.name
+            viewModel.postalCode = meter.postalCode ?? ""
+        }
     }
 
     var meterIcon: String {
@@ -442,6 +458,9 @@ class MeterDetailViewModel: ObservableObject {
     @Published var readings: [ReadingResponse] = []
     @Published var isLoading = false
     @Published var error: String?
+    @Published var meterName = ""
+    @Published var postalCode = ""
+    @Published var isSaving = false
 
     func loadReadings(meterId: UUID) async {
         isLoading = true
@@ -453,6 +472,105 @@ class MeterDetailViewModel: ObservableObject {
             print("Failed to load readings: \(error)")
         }
         isLoading = false
+    }
+
+    func updateMeter(meterId: UUID) async -> Bool {
+        isSaving = true
+        defer { isSaving = false }
+
+        do {
+            _ = try await APIService.shared.updateMeter(
+                id: meterId,
+                name: meterName,
+                postalCode: postalCode.isEmpty ? nil : postalCode
+            )
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+}
+
+// MARK: - Edit Meter View
+
+struct EditMeterView: View {
+    let meter: MeterResponse
+    @ObservedObject var viewModel: MeterDetailViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Meter Details") {
+                    TextField("Meter Name", text: $viewModel.meterName)
+
+                    HStack {
+                        Text("Type")
+                        Spacer()
+                        Text(meter.meterType.capitalized)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Digits")
+                        Spacer()
+                        Text("\(meter.digitCount)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Location") {
+                    TextField("Postal Code (A1A 1A1)", text: $viewModel.postalCode)
+                        .textInputAutocapitalization(.characters)
+                        .onChange(of: viewModel.postalCode) { _, newValue in
+                            viewModel.postalCode = formatPostalCode(newValue)
+                        }
+                }
+
+                Section {
+                    Button {
+                        Task {
+                            if await viewModel.updateMeter(meterId: meter.id) {
+                                dismiss()
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if viewModel.isSaving {
+                                ProgressView()
+                            } else {
+                                Text("Save Changes")
+                            }
+                            Spacer()
+                        }
+                    }
+                    .disabled(viewModel.meterName.isEmpty || viewModel.isSaving)
+                }
+            }
+            .navigationTitle("Edit Meter")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private func formatPostalCode(_ input: String) -> String {
+        let clean = input.replacingOccurrences(of: " ", with: "").uppercased()
+        let filtered = clean.filter { $0.isLetter || $0.isNumber }
+        let limited = String(filtered.prefix(6))
+
+        if limited.count > 3 {
+            let index = limited.index(limited.startIndex, offsetBy: 3)
+            return String(limited[..<index]) + " " + String(limited[index...])
+        }
+        return limited
     }
 }
 

@@ -43,7 +43,190 @@ struct ProfileView: View {
                     ProgressView()
                 }
             }
+            .navigationDestination(for: ProfileDestination.self) { destination in
+                switch destination {
+                case .meters:
+                    AllMetersView()
+                case .readings:
+                    AllReadingsView()
+                case .verified:
+                    AllReadingsView(filterVerified: true)
+                case .verifications:
+                    MyVerificationsView()
+                }
+            }
         }
+    }
+}
+
+// MARK: - All Meters View
+
+struct AllMetersView: View {
+    @StateObject private var viewModel = MetersListViewModel()
+
+    var body: some View {
+        List {
+            ForEach(viewModel.meters) { meter in
+                MeterRowSimple(meter: meter)
+            }
+        }
+        .navigationTitle("My Meters")
+        .task {
+            await viewModel.loadMeters()
+        }
+        .refreshable {
+            await viewModel.loadMeters()
+        }
+        .overlay {
+            if viewModel.meters.isEmpty && !viewModel.isLoading {
+                ContentUnavailableView("No Meters", systemImage: "gauge", description: Text("Add a meter to get started"))
+            }
+        }
+    }
+}
+
+struct MeterRowSimple: View {
+    let meter: MeterResponse
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: meterIcon)
+                .font(.title3)
+                .foregroundStyle(meterColor)
+                .frame(width: 36, height: 36)
+                .background(meterColor.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(meter.name)
+                    .font(.subheadline.weight(.medium))
+                Text(meter.meterType.capitalized)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if let lastRead = meter.lastReadAt {
+                Text(lastRead, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    var meterIcon: String {
+        switch meter.meterType.lowercased() {
+        case "electric": return "bolt.fill"
+        case "gas": return "flame.fill"
+        case "water": return "drop.fill"
+        case "solar": return "sun.max.fill"
+        default: return "gauge"
+        }
+    }
+
+    var meterColor: Color {
+        switch meter.meterType.lowercased() {
+        case "electric": return .yellow
+        case "gas": return .orange
+        case "water": return .blue
+        case "solar": return .green
+        default: return .gray
+        }
+    }
+}
+
+// MARK: - All Readings View
+
+struct AllReadingsView: View {
+    var filterVerified: Bool = false
+    @StateObject private var viewModel = AllReadingsViewModel()
+
+    var body: some View {
+        List {
+            ForEach(filteredReadings) { reading in
+                ReadingRowFull(reading: reading)
+            }
+        }
+        .navigationTitle(filterVerified ? "Verified Readings" : "All Readings")
+        .task {
+            await viewModel.loadReadings()
+        }
+        .refreshable {
+            await viewModel.loadReadings()
+        }
+        .overlay {
+            if filteredReadings.isEmpty && !viewModel.isLoading {
+                ContentUnavailableView("No Readings", systemImage: "camera.viewfinder", description: Text("Take some meter readings"))
+            }
+        }
+    }
+
+    var filteredReadings: [ReadingResponse] {
+        if filterVerified {
+            return viewModel.readings.filter { $0.verificationStatus?.lowercased() == "verified" }
+        }
+        return viewModel.readings
+    }
+}
+
+@MainActor
+class AllReadingsViewModel: ObservableObject {
+    @Published var readings: [ReadingResponse] = []
+    @Published var isLoading = false
+
+    func loadReadings() async {
+        isLoading = true
+        do {
+            let response = try await APIService.shared.getReadings()
+            readings = response.readings
+        } catch {
+            print("Failed to load readings: \(error)")
+        }
+        isLoading = false
+    }
+}
+
+struct ReadingRowFull: View {
+    let reading: ReadingResponse
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(reading.normalizedValue)
+                .font(.system(size: 18, weight: .semibold, design: .monospaced))
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(reading.createdAt, style: .date)
+                    .font(.caption)
+                Text(reading.createdAt, style: .time)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Circle()
+                .fill(statusColor)
+                .frame(width: 10, height: 10)
+        }
+    }
+
+    var statusColor: Color {
+        switch reading.verificationStatus?.lowercased() {
+        case "verified": return .green
+        case "rejected": return .red
+        case "pending": return .orange
+        default: return .gray
+        }
+    }
+}
+
+// MARK: - My Verifications View
+
+struct MyVerificationsView: View {
+    var body: some View {
+        ContentUnavailableView("Coming Soon", systemImage: "hand.thumbsup.fill", description: Text("Your verification history will appear here"))
+            .navigationTitle("My Verifications")
     }
 }
 
@@ -182,50 +365,75 @@ struct XPProgressView: View {
 
 struct StatsGridView: View {
     let stats: UserStatsResponse?
+    @State private var selectedTab: Int?
 
     var body: some View {
         LazyVGrid(columns: [
             GridItem(.flexible()),
             GridItem(.flexible())
         ], spacing: 12) {
-            StatCard(
-                icon: "camera.viewfinder",
-                title: "Readings",
-                value: "\(stats?.totalReadings ?? 0)",
-                color: .blue
-            )
-            StatCard(
-                icon: "checkmark.seal.fill",
-                title: "Verified",
-                value: "\(stats?.verifiedReadings ?? 0)",
-                color: .green
-            )
+            NavigationLink(value: ProfileDestination.meters) {
+                StatCard(
+                    icon: "gauge",
+                    title: "Meters",
+                    value: "\(stats?.metersCount ?? 0)",
+                    color: .indigo
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(value: ProfileDestination.readings) {
+                StatCard(
+                    icon: "camera.viewfinder",
+                    title: "Readings",
+                    value: "\(stats?.totalReadings ?? 0)",
+                    color: .blue
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(value: ProfileDestination.verified) {
+                StatCard(
+                    icon: "checkmark.seal.fill",
+                    title: "Verified",
+                    value: "\(stats?.verifiedReadings ?? 0)",
+                    color: .green
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(value: ProfileDestination.verifications) {
+                StatCard(
+                    icon: "hand.thumbsup.fill",
+                    title: "Verifications",
+                    value: "\(stats?.verificationsPerformed ?? 0)",
+                    color: .purple
+                )
+            }
+            .buttonStyle(.plain)
+
             StatCard(
                 icon: "flame.fill",
                 title: "Streak",
                 value: "\(stats?.streakDays ?? 0) days",
                 color: .orange
             )
-            StatCard(
-                icon: "hand.thumbsup.fill",
-                title: "Verifications",
-                value: "\(stats?.verificationsPerformed ?? 0)",
-                color: .purple
-            )
+
             StatCard(
                 icon: "shield.fill",
                 title: "Trust Score",
                 value: "\(stats?.trustScore ?? 50)",
                 color: .cyan
             )
-            StatCard(
-                icon: "gauge",
-                title: "Meters",
-                value: "\(stats?.metersCount ?? 0)",
-                color: .indigo
-            )
         }
     }
+}
+
+enum ProfileDestination: Hashable {
+    case meters
+    case readings
+    case verified
+    case verifications
 }
 
 struct StatCard: View {
@@ -246,6 +454,10 @@ struct StatCard: View {
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
         .padding()
