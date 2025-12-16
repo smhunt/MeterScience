@@ -870,6 +870,68 @@ web/app/
 
 ---
 
+## Session: Push Notifications (APNs)
+**Date:** 2025-12-15
+**Duration:** ~45 minutes
+
+### Completed
+
+#### iOS Push Notification Integration ✅
+- [x] **PushNotificationManager.swift** - Complete manager class
+  - Permission request handling with UNUserNotificationCenter
+  - Device token registration with backend API
+  - Foreground notification handling with banner/sound
+  - Background notification tap handling
+  - Notification payload parsing (NotificationType enum)
+  - Badge count management
+- [x] **AppDelegate integration** in MeterScienceApp.swift
+  - UIApplicationDelegateAdaptor for push callbacks
+  - didRegisterForRemoteNotifications handler
+  - didFailToRegisterForRemoteNotifications handler
+- [x] **APIService updates**
+  - registerDevice() endpoint method
+  - updateNotificationPreferences() method
+  - getNotificationPreferences() method
+  - Request/Response models for notifications
+- [x] **Xcode project updates**
+  - Added PushNotificationManager.swift to project
+  - Added OfflineQueue.swift to project
+  - Added TierEnforcement.swift to project
+
+#### Bug Fixes ✅
+- [x] Fixed TierEnforcement Swift 6 concurrency issue
+  - `StatsScope.requiredTier` was calling main-actor-isolated method
+  - Inlined the tier lookup logic to avoid cross-actor call
+
+### Files Created
+```
+ios/MeterScience/Services/
+└── PushNotificationManager.swift   # Complete push notification manager
+```
+
+### Files Modified
+- `ios/MeterScience/MeterScienceApp.swift` - Added AppDelegate with push callbacks
+- `ios/MeterScience/Services/APIService.swift` - Added notification API methods
+- `ios/MeterScience/Services/TierEnforcement.swift` - Fixed concurrency issue
+- `ios/MeterScience.xcodeproj/project.pbxproj` - Added new source files
+
+### Backend Status
+Push notification backend was already complete from previous Phase 2 work:
+- `api/src/services/push.py` - APNs HTTP/2 client with JWT auth
+- `api/src/routes/notifications.py` - Device registration, preferences endpoints
+- `api/src/models.py` - DeviceToken, NotificationPreference models
+
+### Git Commits
+- `2a470cf` - Add iOS push notification integration
+
+### Next Steps
+1. Test push notification flow end-to-end
+2. Add notification settings UI in ProfileView
+3. Configure APNs credentials (key file, team ID, bundle ID)
+4. Test on physical device (simulator doesn't support push)
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**
