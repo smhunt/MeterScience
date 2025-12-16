@@ -339,6 +339,10 @@ class SmartScanViewModel: NSObject, ObservableObject {
     @Published var capturedImage: UIImage?
     @Published var manualReading = ""
 
+    // Historical readings for validation
+    @Published var historicalReadings: [ReadingResponse] = []
+    @Published var lastReadingValue: Double?
+
     private let textRecognizer = TextRecognizer()
 
     enum ScanState {
@@ -351,6 +355,27 @@ class SmartScanViewModel: NSObject, ObservableObject {
         self.meter = meter
         super.init()
         print("[SmartScanVM] init for meter: \(meter.name)")
+
+        // Load historical readings on init
+        Task {
+            await loadHistoricalReadings()
+        }
+    }
+
+    func loadHistoricalReadings() async {
+        do {
+            let response = try await APIService.shared.getReadings(meterId: meter.id)
+            historicalReadings = response.readings
+
+            // Get most recent reading value for comparison
+            if let lastReading = response.readings.first,
+               let numericValue = lastReading.numericValue {
+                lastReadingValue = numericValue
+                print("[SmartScanVM] Last reading: \(numericValue)")
+            }
+        } catch {
+            print("[SmartScanVM] Failed to load history: \(error)")
+        }
     }
 
     func processCapture() {
@@ -435,10 +460,17 @@ class SmartScanViewModel: NSObject, ObservableObject {
         let results = await textRecognizer.recognizeText(in: image)
         print("[SmartScanVM] OCR found \(results.count) text regions")
 
-        // Filter for digit sequences
+        let expectedDigits = meter.digitCount
+
+        // STRICT FILTER: Only accept readings matching exact digit count
         let digitReadings = results.compactMap { result -> RecognizedReading? in
             let digitsOnly = result.text.filter { $0.isNumber }
-            guard digitsOnly.count >= 4 && digitsOnly.count <= 10 else { return nil }
+
+            // STRICT: Must match exact digit count configured for meter
+            guard digitsOnly.count == expectedDigits else {
+                print("[SmartScanVM] Rejected '\(digitsOnly)' - wrong digit count (\(digitsOnly.count) != \(expectedDigits))")
+                return nil
+            }
 
             return RecognizedReading(
                 text: result.text,
@@ -447,31 +479,53 @@ class SmartScanViewModel: NSObject, ObservableObject {
                 boundingBox: result.boundingBox
             )
         }
-        print("[SmartScanVM] Found \(digitReadings.count) potential readings, fromCapture: \(fromCapture)")
+        print("[SmartScanVM] Found \(digitReadings.count) readings with exact \(expectedDigits) digits")
 
-        if digitReadings.isEmpty {
-            // If from capture button and no digits found, still show result card for manual entry
+        // Filter by historical plausibility if we have past readings
+        var plausibleReadings = digitReadings
+        if let lastValue = lastReadingValue, lastValue > 0 {
+            plausibleReadings = digitReadings.filter { reading in
+                guard let numericValue = Double(reading.digitsOnly) else { return true }
+
+                // Meters only go up (or reset). Reject if much lower than last reading.
+                // Allow some tolerance for misreads (5% below last reading)
+                let minAcceptable = lastValue * 0.95
+
+                // Reject if more than 50% higher than last reading (unusual spike)
+                // This is a loose check - meters can have variable usage
+                let maxAcceptable = lastValue * 1.5
+
+                let isPlausible = numericValue >= minAcceptable && numericValue <= maxAcceptable
+
+                if !isPlausible {
+                    print("[SmartScanVM] Rejected '\(reading.digitsOnly)' - implausible vs last (\(lastValue)): value=\(numericValue)")
+                }
+                return isPlausible
+            }
+            print("[SmartScanVM] After plausibility filter: \(plausibleReadings.count) readings")
+        }
+
+        if plausibleReadings.isEmpty && !digitReadings.isEmpty {
+            // If we filtered everything out, show all digit-correct readings
+            // but let user know they may be suspicious
+            print("[SmartScanVM] All readings filtered as implausible - showing all \(expectedDigits)-digit candidates")
+            plausibleReadings = digitReadings
+        }
+
+        if plausibleReadings.isEmpty {
+            // If from capture and no digits found, still show result card for manual entry
             if fromCapture {
                 self.detectedReading = ""
                 self.confidence = 0
                 self.allCandidates = []
                 self.scanState = .detected
+                print("[SmartScanVM] No \(expectedDigits)-digit readings found - prompting manual entry")
             }
             return
         }
 
-        // Sort by confidence and digit count matching expected
-        let sorted = digitReadings.sorted { a, b in
-            // Prefer readings closer to expected digit count
-            let expectedDigits = meter.digitCount
-            let aDiff = abs(a.digitsOnly.count - expectedDigits)
-            let bDiff = abs(b.digitsOnly.count - expectedDigits)
-
-            if aDiff != bDiff {
-                return aDiff < bDiff
-            }
-            return a.confidence > b.confidence
-        }
+        // Sort by confidence (all are now correct digit count)
+        let sorted = plausibleReadings.sorted { $0.confidence > $1.confidence }
 
         if let best = sorted.first {
             print("[SmartScanVM] Best reading: \(best.digitsOnly) confidence: \(best.confidence)")
