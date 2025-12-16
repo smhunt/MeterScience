@@ -76,13 +76,27 @@ class CalibrationViewModel: NSObject, ObservableObject {
     @Published var capturedImage: UIImage?
     @Published var isCapturing = false
     @Published var useCamera = true  // Toggle between camera and manual entry
+    @Published var isFlashOn = false
 
     let cameraSession = AVCaptureSession()
     private var photoOutput: AVCapturePhotoOutput?
+    private var cameraDevice: AVCaptureDevice?
 
     override init() {
         super.init()
         print("[CalibrationVM] init")
+        // Load saved postal code
+        if let savedPostalCode = UserDefaults.standard.string(forKey: "lastPostalCode") {
+            postalCode = savedPostalCode
+            print("[CalibrationVM] Loaded saved postal code: \(savedPostalCode)")
+        }
+    }
+
+    func savePostalCode() {
+        if !postalCode.isEmpty && isValidCanadianPostalCode(postalCode) {
+            UserDefaults.standard.set(postalCode, forKey: "lastPostalCode")
+            print("[CalibrationVM] Saved postal code: \(postalCode)")
+        }
     }
 
     var canProceed: Bool {
@@ -99,14 +113,54 @@ class CalibrationViewModel: NSObject, ObservableObject {
 
     func nextStep() {
         print("[CalibrationVM] nextStep from \(currentStep)")
+        // Dismiss keyboard when changing steps
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+
         if currentStep < 4 {
             currentStep += 1
+            // Set default meter name when entering step 2
+            if currentStep == 2 && meterName.isEmpty {
+                meterName = "My \(meterType.rawValue.capitalized) Meter"
+            }
             // Start camera when entering step 3
             if currentStep == 3 && useCamera {
                 print("[CalibrationVM] Entering step 3, starting camera setup")
                 startCamera()
             }
         }
+    }
+
+    // Canadian postal code formatter: A1A 1A1
+    func formatPostalCode(_ input: String) -> String {
+        // Remove all spaces and uppercase
+        let clean = input.replacingOccurrences(of: " ", with: "").uppercased()
+
+        // Only allow valid postal code characters
+        let filtered = clean.filter { char in
+            // First, third, fifth chars should be letters (no D, F, I, O, Q, U, W, Z)
+            // Second, fourth, sixth chars should be digits
+            char.isLetter || char.isNumber
+        }
+
+        // Limit to 6 characters
+        let limited = String(filtered.prefix(6))
+
+        // Add space after first 3 characters if we have more than 3
+        if limited.count > 3 {
+            let index = limited.index(limited.startIndex, offsetBy: 3)
+            return String(limited[..<index]) + " " + String(limited[index...])
+        }
+        return limited
+    }
+
+    func isValidCanadianPostalCode(_ code: String) -> Bool {
+        let clean = code.replacingOccurrences(of: " ", with: "").uppercased()
+        guard clean.count == 6 else { return false }
+
+        // Pattern: Letter-Digit-Letter Digit-Letter-Digit
+        // Excluding D, F, I, O, Q, U, W, Z from letters
+        let pattern = "^[ABCEGHJ-NPRSTVXY][0-9][ABCEGHJ-NPRSTV-Z] ?[0-9][ABCEGHJ-NPRSTV-Z][0-9]$"
+        return code.range(of: pattern, options: .regularExpression) != nil
     }
 
     func previousStep() {
@@ -138,6 +192,21 @@ class CalibrationViewModel: NSObject, ObservableObject {
         }
     }
 
+    func toggleFlash() {
+        isFlashOn.toggle()
+        print("[CalibrationVM] Flash toggled: \(isFlashOn)")
+
+        // Turn torch on/off for preview
+        guard let device = cameraDevice, device.hasTorch else { return }
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = isFlashOn ? .on : .off
+            device.unlockForConfiguration()
+        } catch {
+            print("[CalibrationVM] Torch error: \(error)")
+        }
+    }
+
     func startCamera() {
         print("[CalibrationVM] startCamera called")
         checkCameraPermission()
@@ -157,6 +226,10 @@ class CalibrationViewModel: NSObject, ObservableObject {
                 return
             }
             print("[CalibrationVM] Camera device found: \(device.localizedName)")
+
+            await MainActor.run {
+                self.cameraDevice = device
+            }
 
             do {
                 let input = try AVCaptureDeviceInput(device: device)
@@ -209,8 +282,19 @@ class CalibrationViewModel: NSObject, ObservableObject {
 
     func stopCamera() {
         print("[CalibrationVM] stopCamera called")
+        // Turn off torch when stopping
+        if let device = cameraDevice, device.hasTorch, device.torchMode == .on {
+            do {
+                try device.lockForConfiguration()
+                device.torchMode = .off
+                device.unlockForConfiguration()
+            } catch {
+                print("[CalibrationVM] Torch off error: \(error)")
+            }
+        }
         cameraSession.stopRunning()
         isCameraReady = false
+        isFlashOn = false
     }
 
     func capturePhoto() {
@@ -235,6 +319,9 @@ class CalibrationViewModel: NSObject, ObservableObject {
         print("[CalibrationVM] createMeter called")
         isLoading = true
         defer { isLoading = false }
+
+        // Save postal code for next time
+        savePostalCode()
 
         do {
             let meter = try await APIService.shared.createMeter(
@@ -459,13 +546,31 @@ struct MeterDetailsStep: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        TextField("e.g., M5V 1K4", text: $viewModel.postalCode)
+                        TextField("A1A 1A1", text: $viewModel.postalCode)
                             .textFieldStyle(.roundedBorder)
                             .textInputAutocapitalization(.characters)
+                            .onChange(of: viewModel.postalCode) { _, newValue in
+                                let formatted = viewModel.formatPostalCode(newValue)
+                                if formatted != newValue {
+                                    viewModel.postalCode = formatted
+                                }
+                            }
 
-                        Text("Used for neighborhood comparisons. Only the first 3 characters are shared.")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
+                        if !viewModel.postalCode.isEmpty {
+                            if viewModel.isValidCanadianPostalCode(viewModel.postalCode) {
+                                Label("Valid postal code", systemImage: "checkmark.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                            } else {
+                                Label("Enter format: A1A 1A1", systemImage: "info.circle")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            }
+                        } else {
+                            Text("Used for neighborhood comparisons. Only the first 3 characters are shared.")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
 
                     Divider()
@@ -519,50 +624,62 @@ struct SampleReadingStep: View {
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                // Header
-                VStack(spacing: 8) {
-                    Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 40))
-                        .foregroundStyle(.green)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 12) {
+                    // Compact Header
+                    HStack(spacing: 12) {
+                        Image(systemName: "camera.viewfinder")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.green)
 
-                    Text("First Reading")
-                        .font(.title2.bold())
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("First Reading")
+                                .font(.headline)
+                            Text("Capture your meter reading")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
-                    Text("Take a photo of your meter to capture the reading")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+
+                    // Camera Permission Check
+                    Group {
+                        if viewModel.cameraPermissionStatus == .notDetermined {
+                            CameraPermissionCard(viewModel: viewModel)
+                        } else if viewModel.cameraPermissionStatus == .denied || viewModel.cameraPermissionStatus == .restricted {
+                            CameraDeniedCard(viewModel: viewModel)
+                        } else if viewModel.useCamera {
+                            // Camera Mode
+                            CameraCaptureCard(viewModel: viewModel)
+                        } else {
+                            // Manual Mode
+                            ManualEntryCard(viewModel: viewModel, isInputFocused: _isInputFocused)
+                        }
+                    }
+                    .id("cameraSection")
                 }
-                .padding(.top)
-
-                // Camera Permission Check
-                if viewModel.cameraPermissionStatus == .notDetermined {
-                    CameraPermissionCard(viewModel: viewModel)
-                } else if viewModel.cameraPermissionStatus == .denied || viewModel.cameraPermissionStatus == .restricted {
-                    CameraDeniedCard(viewModel: viewModel)
-                } else if viewModel.useCamera {
-                    // Camera Mode
-                    CameraCaptureCard(viewModel: viewModel)
-                } else {
-                    // Manual Mode
-                    ManualEntryCard(viewModel: viewModel, isInputFocused: _isInputFocused)
-                }
-
-                // Reading Display (shows after capture or manual entry)
-                if !viewModel.sampleReading.isEmpty {
-                    ReadingDisplayCard(viewModel: viewModel)
-                }
+                .padding(.horizontal)
+                .padding(.bottom, 100)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 100)
-        }
-        .onAppear {
-            print("[SampleReadingStep] onAppear")
-            viewModel.checkCameraPermission()
-            if viewModel.cameraPermissionStatus == .authorized && viewModel.useCamera {
-                viewModel.startCamera()
+            .onAppear {
+                print("[SampleReadingStep] onAppear")
+                // Dismiss keyboard immediately
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+
+                viewModel.checkCameraPermission()
+                if viewModel.cameraPermissionStatus == .authorized && viewModel.useCamera {
+                    viewModel.startCamera()
+                }
+                // Auto-scroll to camera section
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    withAnimation {
+                        proxy.scrollTo("cameraSection", anchor: .top)
+                    }
+                }
             }
         }
     }
@@ -671,38 +788,107 @@ struct CameraDeniedCard: View {
 
 struct CameraCaptureCard: View {
     @ObservedObject var viewModel: CalibrationViewModel
+    @FocusState private var isReadingFocused: Bool
 
     var body: some View {
         VStack(spacing: 12) {
             if let capturedImage = viewModel.capturedImage {
-                // Show captured image
-                Image(uiImage: capturedImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                HStack(spacing: 12) {
+                // Step indicator
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("Photo captured!")
+                        .font(.subheadline.weight(.medium))
+                    Spacer()
                     Button {
                         print("[CameraCaptureCard] Retake tapped")
                         viewModel.retakePhoto()
                     } label: {
-                        Label("Retake", systemImage: "arrow.counterclockwise")
-                            .frame(maxWidth: .infinity)
+                        Text("Retake")
+                            .font(.caption)
                     }
-                    .buttonStyle(.bordered)
                 }
+
+                // Show captured image (smaller)
+                Image(uiImage: capturedImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 120)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.green, lineWidth: 2)
+                    )
+
+                // Clear instruction card
+                VStack(spacing: 12) {
+                    HStack {
+                        Image(systemName: "keyboard")
+                            .font(.title2)
+                            .foregroundStyle(.blue)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Now enter the reading")
+                                .font(.headline)
+                            Text("Type the numbers shown on your meter")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+
+                    TextField("e.g. 03093", text: $viewModel.sampleReading)
+                        .keyboardType(.numberPad)
+                        .font(.system(size: 36, weight: .bold, design: .monospaced))
+                        .multilineTextAlignment(.center)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(viewModel.sampleReading.count >= 4 ? Color.green : Color.clear, lineWidth: 2)
+                        )
+                        .focused($isReadingFocused)
+                        .onAppear {
+                            // Auto-focus the text field after capture
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                isReadingFocused = true
+                            }
+                        }
+                        .onChange(of: viewModel.sampleReading) { _, newValue in
+                            let filtered = newValue.filter { $0.isNumber }
+                            if filtered.count > viewModel.digitCount {
+                                viewModel.sampleReading = String(filtered.prefix(viewModel.digitCount))
+                            } else {
+                                viewModel.sampleReading = filtered
+                            }
+                        }
+
+                    if viewModel.sampleReading.count >= 4 {
+                        Label("\(viewModel.sampleReading) \(viewModel.meterType.unit) - Ready!", systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.green)
+                    } else {
+                        Text("Enter at least 4 digits")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.1), radius: 5)
             } else {
-                // Show camera preview
+                // Show camera preview - NO keyboard should be visible here
                 ZStack {
                     if viewModel.isCameraReady {
                         CalibrationCameraPreview(session: viewModel.cameraSession)
-                            .frame(height: 220)
+                            .frame(height: 280)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                     } else {
                         RoundedRectangle(cornerRadius: 12)
                             .fill(Color.black)
-                            .frame(height: 220)
+                            .frame(height: 280)
                             .overlay {
                                 VStack(spacing: 8) {
                                     ProgressView()
@@ -720,24 +906,47 @@ struct CameraCaptureCard: View {
                             .stroke(Color.white, lineWidth: 2)
                             .frame(width: 200, height: 60)
                     }
+
+                    // Flash button overlay (top right)
+                    if viewModel.isCameraReady {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Button {
+                                    viewModel.toggleFlash()
+                                } label: {
+                                    Image(systemName: viewModel.isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(viewModel.isFlashOn ? .yellow : .white)
+                                        .padding(12)
+                                        .background(.black.opacity(0.5))
+                                        .clipShape(Circle())
+                                }
+                                .padding(8)
+                            }
+                            Spacer()
+                        }
+                    }
                 }
 
                 // Capture button
-                Button {
-                    print("[CameraCaptureCard] Capture tapped")
-                    viewModel.capturePhoto()
-                } label: {
-                    if viewModel.isCapturing {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        Label("Capture Reading", systemImage: "camera.fill")
-                            .frame(maxWidth: .infinity)
+                HStack(spacing: 12) {
+                    Button {
+                        print("[CameraCaptureCard] Capture tapped")
+                        viewModel.capturePhoto()
+                    } label: {
+                        if viewModel.isCapturing {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            Label("Capture Reading", systemImage: "camera.fill")
+                                .frame(maxWidth: .infinity)
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                    .disabled(!viewModel.isCameraReady || viewModel.isCapturing)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .disabled(!viewModel.isCameraReady || viewModel.isCapturing)
             }
 
             // Switch to manual entry

@@ -299,7 +299,7 @@ struct MessageResponse: Decodable {
     let message: String
 }
 
-struct MeterResponse: Decodable, Identifiable {
+struct MeterResponse: Decodable, Identifiable, Hashable {
     let id: UUID
     let userId: UUID
     let name: String
@@ -338,7 +338,7 @@ struct ReadingResponse: Decodable, Identifiable {
     let normalizedValue: String
     let numericValue: Double?
     let confidence: Float
-    let verificationStatus: String
+    let verificationStatus: String?
     let usageSinceLast: Double?
     let daysSinceLast: Double?
     let capturedAt: Date

@@ -300,6 +300,47 @@ web/
 
 ---
 
+## Session: Calibration UX + Reading History
+**Date:** 2025-12-15
+
+### Completed
+
+#### Calibration Flow Improvements ✅
+- [x] Default meter name auto-fills based on type ("My Gas Meter", etc.)
+- [x] Canadian postal code formatting (A1A 1A1) with validation
+- [x] Postal code saved to UserDefaults for reuse
+- [x] Compact header on Step 3 - camera visible without scrolling
+- [x] Auto-dismiss keyboard when entering camera step
+- [x] Clear post-capture UI: "Photo captured!" → "Now enter the reading"
+- [x] Auto-focus text field after photo capture
+- [x] Flash/torch toggle button on camera preview
+- [x] Torch stays on for aiming (not just capture flash)
+
+#### Meter Detail View ✅
+- [x] Tap meter → shows detail view with reading history
+- [x] Stats: readings count, latest value, postal code
+- [x] "Take New Reading" button opens scanner
+- [x] Reading rows: value, date/time, verification status dot
+- [x] Pull to refresh readings
+- [x] Navigation using NavigationLink
+
+#### API Integration ✅
+- [x] Backend running on port 3090
+- [x] WiFi deployment working (phone untethered)
+
+### Files Changed
+- `CalibrationView.swift` - UX improvements, flash, postal code
+- `ContentView.swift` - Added MeterDetailView with readings history
+- `APIService.swift` - Made MeterResponse Hashable, ReadingResponse optional status
+
+### Next Steps
+1. Use meter digit count in OCR validation
+2. Activity/event log view
+3. Profile improvements
+4. GPS location capture
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**

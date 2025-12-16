@@ -88,11 +88,9 @@ struct MetersListView: View {
                 } else {
                     List {
                         ForEach(viewModel.meters) { meter in
-                            MeterRow(meter: meter)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    onScan(meter)
-                                }
+                            NavigationLink(value: meter) {
+                                MeterRow(meter: meter)
+                            }
                         }
                         .onDelete { indexSet in
                             Task {
@@ -106,6 +104,11 @@ struct MetersListView: View {
                 }
             }
             .navigationTitle("My Meters")
+            .navigationDestination(for: MeterResponse.self) { meter in
+                MeterDetailView(meter: meter) {
+                    onScan(meter)
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -186,10 +189,9 @@ struct MeterRow: View {
 
             Spacer()
 
-            // Scan Button
-            Image(systemName: "camera.viewfinder")
-                .font(.title3)
-                .foregroundStyle(.blue)
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
     }
@@ -212,6 +214,229 @@ struct MeterRow: View {
         case "solar": return .green
         default: return .gray
         }
+    }
+}
+
+// MARK: - Meter Detail View
+
+struct MeterDetailView: View {
+    let meter: MeterResponse
+    let onScan: () -> Void
+
+    @StateObject private var viewModel = MeterDetailViewModel()
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Meter Header Card
+                VStack(spacing: 16) {
+                    HStack {
+                        Image(systemName: meterIcon)
+                            .font(.system(size: 36))
+                            .foregroundStyle(meterColor)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(meter.name)
+                                .font(.title2.bold())
+                            Text(meter.meterType.capitalized)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+                    }
+
+                    // Quick stats
+                    HStack(spacing: 20) {
+                        StatBox(
+                            value: "\(viewModel.readings.count)",
+                            label: "Readings"
+                        )
+
+                        if let latest = viewModel.readings.first {
+                            StatBox(
+                                value: latest.normalizedValue,
+                                label: "Latest"
+                            )
+                        }
+
+                        if let postal = meter.postalCode {
+                            StatBox(
+                                value: postal,
+                                label: "Location"
+                            )
+                        }
+                    }
+
+                    // Take Reading Button
+                    Button {
+                        onScan()
+                    } label: {
+                        Label("Take New Reading", systemImage: "camera.viewfinder")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(meterColor)
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.05), radius: 10)
+
+                // Readings History
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Text("Reading History")
+                            .font(.headline)
+                        Spacer()
+                        Text("\(viewModel.readings.count) total")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: 100)
+                    } else if viewModel.readings.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .font(.system(size: 40))
+                                .foregroundStyle(.secondary)
+                            Text("No readings yet")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text("Take your first reading to start tracking")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else {
+                        LazyVStack(spacing: 8) {
+                            ForEach(viewModel.readings) { reading in
+                                ReadingRow(reading: reading, meterColor: meterColor)
+                            }
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.05), radius: 10)
+            }
+            .padding()
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Meter Details")
+        .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.loadReadings(meterId: meter.id)
+        }
+        .refreshable {
+            await viewModel.loadReadings(meterId: meter.id)
+        }
+    }
+
+    var meterIcon: String {
+        switch meter.meterType.lowercased() {
+        case "electric": return "bolt.fill"
+        case "gas": return "flame.fill"
+        case "water": return "drop.fill"
+        case "solar": return "sun.max.fill"
+        default: return "gauge"
+        }
+    }
+
+    var meterColor: Color {
+        switch meter.meterType.lowercased() {
+        case "electric": return .yellow
+        case "gas": return .orange
+        case "water": return .blue
+        case "solar": return .green
+        default: return .gray
+        }
+    }
+}
+
+struct StatBox: View {
+    let value: String
+    let label: String
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.headline.monospacedDigit())
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct ReadingRow: View {
+    let reading: ReadingResponse
+    let meterColor: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Reading value
+            Text(reading.normalizedValue)
+                .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                .foregroundStyle(meterColor)
+
+            Spacer()
+
+            // Metadata
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(reading.createdAt, style: .date)
+                    .font(.caption)
+                Text(reading.createdAt, style: .time)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Status indicator
+            Circle()
+                .fill(statusColor)
+                .frame(width: 10, height: 10)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    var statusColor: Color {
+        switch reading.verificationStatus?.lowercased() {
+        case "verified": return .green
+        case "rejected": return .red
+        case "pending": return .orange
+        default: return .gray
+        }
+    }
+}
+
+@MainActor
+class MeterDetailViewModel: ObservableObject {
+    @Published var readings: [ReadingResponse] = []
+    @Published var isLoading = false
+    @Published var error: String?
+
+    func loadReadings(meterId: UUID) async {
+        isLoading = true
+        do {
+            let response = try await APIService.shared.getReadings(meterId: meterId)
+            readings = response.readings
+        } catch {
+            self.error = error.localizedDescription
+            print("Failed to load readings: \(error)")
+        }
+        isLoading = false
     }
 }
 
