@@ -382,6 +382,119 @@ web/
 
 ---
 
+## Session: Multiple Feature Implementation (Parallel Agents)
+**Date:** 2025-12-15
+
+### Completed
+
+#### List Detail Pages ✅
+- [x] ReadingDetailView - Full reading info with confidence bar, meter info
+- [x] MeterDetailViewWrapper - Meter details from profile section
+- [x] VerificationDetailView - Vote summary with reading/meter info
+- [x] MyVerificationsView - Full implementation (replaced Coming Soon)
+- [x] Navigation from all list views to detail views
+- [x] Made ReadingResponse/VoteResponse Hashable for NavigationLink
+
+#### Image Preprocessing for OCR ✅
+- [x] Created ImageProcessor.swift service
+- [x] normalizeOrientation() - Fixes EXIF orientation issues
+- [x] detectTextAngle() - Vision framework text rotation detection
+- [x] rotateToHorizontal() - Auto-rotate images for OCR
+- [x] enhanceContrast() - Contrast boost, grayscale, sharpening
+- [x] preprocessForOCR() - Complete pipeline
+- [x] Integrated with SmartScanView processCapture()
+
+#### GPS Location Capture ✅
+- [x] Created LocationManager.swift singleton
+- [x] Request "when in use" location permission
+- [x] getCurrentLocation() async method
+- [x] Updated SmartScanView to capture location on scan
+- [x] Updated APIService CreateReadingRequest with lat/lng
+- [x] Added NSLocationWhenInUseUsageDescription
+
+#### Activity Log View ✅
+- [x] ActivityItem model with types (reading, verification, XP, badge, level, streak)
+- [x] ActivityMetadata struct for additional info
+- [x] Chronological display grouped by date
+- [x] Integration with readings, stats, verification APIs
+- [x] Pull to refresh, empty state
+- [x] Navigation from Profile tab
+
+#### Version Notes Modal ✅
+- [x] Created VersionNotesView.swift
+- [x] "How It Works" section - 4-step flow
+- [x] Changelog with version history
+- [x] Roadmap with upcoming features
+- [x] Accessible from Profile > About & Roadmap
+
+### Files Created
+```
+ios/MeterScience/Services/
+├── ImageProcessor.swift    # Image preprocessing for OCR
+└── LocationManager.swift   # GPS location capture
+
+ios/MeterScience/Views/
+├── ActivityLogView.swift   # Activity history view
+└── VersionNotesView.swift  # About, changelog, roadmap
+```
+
+### Files Modified
+- `ProfileView.swift` - +771 lines (detail views, navigation, activity log link)
+- `SmartScanView.swift` - GPS capture, image preprocessing
+- `APIService.swift` - lat/lng fields, Hashable conformances
+- `Models.swift` - ActivityItem, ActivityType, ActivityMetadata
+- `project.pbxproj` - New file references
+
+### Git Commits
+- `26c4546` Add detail pages for all list views in Profile tab
+- `c1c3adc` Add image preprocessing for OCR improvement
+- `4853141` Add GPS location capture to meter readings
+- `5de43fb` Add Activity Log view to show user's recent actions
+- `7cf35a0` Add Version Notes modal to Profile view
+
+### Build Status
+✅ BUILD SUCCEEDED - iPhone 15 Pro + iPad mini simulator
+
+### Next Steps
+1. Test full OCR preprocessing pipeline on real meters
+2. Verify GPS coordinates are being captured
+3. Test activity log displays correctly
+4. Consider implementing reference image system (Phase 3 of OCR learning)
+
+---
+
+## Session: Edit Meter Fix + Claude Code Sounds
+**Date:** 2025-12-15
+
+### Completed
+
+#### Edit Meter Bug Fix
+- [x] Added Picker for Meter Type (electric/gas/water/solar/other)
+- [x] Added Stepper for Digit Count (4-8 range)
+- [x] Updated backend MeterUpdate model to accept meter_type
+- [x] Added meter_type validation in PATCH endpoint
+- [x] Updated iOS APIService.UpdateMeterRequest with new fields
+- [x] Updated MeterDetailViewModel with meterType/digitCount
+- [x] Build verified successful on iPhone 15 Pro simulator
+
+#### Claude Code Sounds Package
+- [x] Created open-source repo: https://github.com/smhunt/claude-code-sounds
+- [x] Packaged all sound effects configuration
+- [x] Created README with installation instructions
+- [x] Created install.sh one-liner installer
+- [x] 12 event types with customizable sounds + speech
+
+### Git Commits
+- `bdf98eb` Fix Edit Meter to allow editing Type and Digit Count
+
+### Files Changed
+- `api/src/routes/meters.py` - Added meter_type to MeterUpdate + validation
+- `ios/MeterScience/Services/APIService.swift` - Updated UpdateMeterRequest
+- `ios/MeterScience/Views/ContentView.swift` - Picker/Stepper in EditMeterView
+- `BACKLOG.md` - Marked bug as resolved
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**
