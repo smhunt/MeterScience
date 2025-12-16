@@ -270,3 +270,88 @@ struct LeaderboardEntry: Codable, Identifiable {
     let trustScore: Int
     let rank: Int
 }
+
+// MARK: - Activity Log
+
+struct ActivityItem: Identifiable {
+    let id: UUID
+    let type: ActivityType
+    let timestamp: Date
+    let title: String
+    let subtitle: String?
+    let icon: String
+    let color: Color
+    let metadata: ActivityMetadata?
+
+    init(id: UUID = UUID(), type: ActivityType, timestamp: Date, title: String, subtitle: String? = nil, metadata: ActivityMetadata? = nil) {
+        self.id = id
+        self.type = type
+        self.timestamp = timestamp
+        self.title = title
+        self.subtitle = subtitle
+        self.metadata = metadata
+
+        // Set icon and color based on type
+        switch type {
+        case .readingSubmitted:
+            self.icon = "camera.viewfinder"
+            self.color = .blue
+        case .verificationPerformed:
+            self.icon = "checkmark.seal.fill"
+            self.color = .green
+        case .xpEarned:
+            self.icon = "star.fill"
+            self.color = .yellow
+        case .badgeEarned:
+            self.icon = "trophy.fill"
+            self.color = .orange
+        case .levelUp:
+            self.icon = "arrow.up.circle.fill"
+            self.color = .purple
+        case .streakMilestone:
+            self.icon = "flame.fill"
+            self.color = .orange
+        case .campaignJoined:
+            self.icon = "flag.fill"
+            self.color = .indigo
+        }
+    }
+}
+
+enum ActivityType {
+    case readingSubmitted
+    case verificationPerformed
+    case xpEarned
+    case badgeEarned
+    case levelUp
+    case streakMilestone
+    case campaignJoined
+}
+
+struct ActivityMetadata {
+    let readingValue: String?
+    let meterName: String?
+    let xpAmount: Int?
+    let badgeIcon: String?
+    let newLevel: Int?
+    let streakDays: Int?
+    let campaignName: String?
+
+    init(
+        readingValue: String? = nil,
+        meterName: String? = nil,
+        xpAmount: Int? = nil,
+        badgeIcon: String? = nil,
+        newLevel: Int? = nil,
+        streakDays: Int? = nil,
+        campaignName: String? = nil
+    ) {
+        self.readingValue = readingValue
+        self.meterName = meterName
+        self.xpAmount = xpAmount
+        self.badgeIcon = badgeIcon
+        self.newLevel = newLevel
+        self.streakDays = streakDays
+        self.campaignName = campaignName
+    }
+}

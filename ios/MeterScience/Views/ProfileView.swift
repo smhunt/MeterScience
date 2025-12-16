@@ -1276,6 +1276,7 @@ struct BadgeView: View {
 
 struct AccountActionsView: View {
     @StateObject private var auth = AuthManager.shared
+    @State private var showingVersionNotes = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -1311,6 +1312,17 @@ struct AccountActionsView: View {
             }
 
             Button {
+                showingVersionNotes = true
+            } label: {
+                AccountActionRow(
+                    icon: "info.circle.fill",
+                    title: "About & Roadmap",
+                    subtitle: "Version notes and upcoming features",
+                    color: .blue
+                )
+            }
+
+            Button {
                 auth.logout()
             } label: {
                 AccountActionRow(
@@ -1325,6 +1337,9 @@ struct AccountActionsView: View {
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.05), radius: 10)
+        .sheet(isPresented: $showingVersionNotes) {
+            VersionNotesView()
+        }
     }
 }
 
@@ -1357,19 +1372,6 @@ struct AccountActionRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
-    }
-}
-
-// MARK: - Activity Log View
-
-struct ActivityLogView: View {
-    var body: some View {
-        ContentUnavailableView(
-            "Activity Log",
-            systemImage: "list.bullet.clipboard",
-            description: Text("Your activity history will appear here")
-        )
-        .navigationTitle("Activity Log")
     }
 }
 
