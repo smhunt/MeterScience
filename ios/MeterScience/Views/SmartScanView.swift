@@ -115,10 +115,15 @@ struct SmartScanView: View {
             }
         }
         .sheet(isPresented: $showingCamera) {
-            ImagePicker(image: $viewModel.capturedImage) {
-                // Photo was taken - run OCR
-                viewModel.processCapture()
-            }
+            ImagePicker(
+                image: $viewModel.capturedImage,
+                onCapture: {
+                    // Photo was taken - run OCR
+                    viewModel.processCapture()
+                },
+                meterName: meter.name,
+                digitCount: meter.digitCount
+            )
         }
         .alert("Error", isPresented: $viewModel.showError) {
             Button("OK") { viewModel.errorMessage = nil }
@@ -134,11 +139,18 @@ struct ImagePicker: UIViewControllerRepresentable {
     @Binding var image: UIImage?
     @Environment(\.dismiss) private var dismiss
     var onCapture: () -> Void
+    var meterName: String = "Meter"
+    var digitCount: Int = 6
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
         picker.delegate = context.coordinator
+
+        // Add custom overlay with guide markings
+        let overlayView = createOverlayView(for: picker)
+        picker.cameraOverlayView = overlayView
+
         return picker
     }
 
@@ -146,6 +158,82 @@ struct ImagePicker: UIViewControllerRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
+    }
+
+    private func createOverlayView(for picker: UIImagePickerController) -> UIView {
+        let screenBounds = UIScreen.main.bounds
+        let overlay = UIView(frame: screenBounds)
+        overlay.isUserInteractionEnabled = false
+
+        // Guide rectangle in center
+        let guideWidth: CGFloat = 280
+        let guideHeight: CGFloat = 80
+        let guideX = (screenBounds.width - guideWidth) / 2
+        let guideY = (screenBounds.height - guideHeight) / 2 - 60
+
+        let guideLayer = CAShapeLayer()
+        let guidePath = UIBezierPath(roundedRect: CGRect(x: guideX, y: guideY, width: guideWidth, height: guideHeight), cornerRadius: 12)
+        guideLayer.path = guidePath.cgPath
+        guideLayer.strokeColor = UIColor.white.cgColor
+        guideLayer.fillColor = UIColor.clear.cgColor
+        guideLayer.lineWidth = 3
+        guideLayer.lineDashPattern = [10, 5]
+        overlay.layer.addSublayer(guideLayer)
+
+        // Corner brackets
+        let bracketLength: CGFloat = 20
+        let bracketWidth: CGFloat = 4
+
+        // Top-left
+        addBracket(to: overlay, x: guideX, y: guideY, horizontal: true, vertical: true, length: bracketLength, width: bracketWidth)
+        // Top-right
+        addBracket(to: overlay, x: guideX + guideWidth, y: guideY, horizontal: false, vertical: true, length: bracketLength, width: bracketWidth)
+        // Bottom-left
+        addBracket(to: overlay, x: guideX, y: guideY + guideHeight, horizontal: true, vertical: false, length: bracketLength, width: bracketWidth)
+        // Bottom-right
+        addBracket(to: overlay, x: guideX + guideWidth, y: guideY + guideHeight, horizontal: false, vertical: false, length: bracketLength, width: bracketWidth)
+
+        // Hint label
+        let hintLabel = UILabel()
+        hintLabel.text = "Align meter reading in the box"
+        hintLabel.textColor = .white
+        hintLabel.font = .systemFont(ofSize: 16, weight: .medium)
+        hintLabel.textAlignment = .center
+        hintLabel.frame = CGRect(x: 0, y: guideY + guideHeight + 20, width: screenBounds.width, height: 30)
+        overlay.addSubview(hintLabel)
+
+        // Digit hint
+        let digitLabel = UILabel()
+        digitLabel.text = "\(digitCount) digits expected"
+        digitLabel.textColor = .white.withAlphaComponent(0.7)
+        digitLabel.font = .systemFont(ofSize: 14)
+        digitLabel.textAlignment = .center
+        digitLabel.frame = CGRect(x: 0, y: guideY + guideHeight + 50, width: screenBounds.width, height: 24)
+        overlay.addSubview(digitLabel)
+
+        return overlay
+    }
+
+    private func addBracket(to view: UIView, x: CGFloat, y: CGFloat, horizontal: Bool, vertical: Bool, length: CGFloat, width: CGFloat) {
+        let hBar = UIView()
+        hBar.backgroundColor = .white
+        let vBar = UIView()
+        vBar.backgroundColor = .white
+
+        if horizontal {
+            hBar.frame = CGRect(x: x, y: y - width/2, width: length, height: width)
+            vBar.frame = CGRect(x: x - width/2, y: y, width: width, height: vertical ? length : -length)
+        } else {
+            hBar.frame = CGRect(x: x - length, y: y - width/2, width: length, height: width)
+            vBar.frame = CGRect(x: x - width/2, y: y, width: width, height: vertical ? length : -length)
+        }
+
+        if !vertical {
+            vBar.frame.origin.y = y - (vertical ? 0 : length)
+        }
+
+        view.addSubview(hBar)
+        view.addSubview(vBar)
     }
 
     class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
