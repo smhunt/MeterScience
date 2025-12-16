@@ -177,8 +177,8 @@ actor APIService {
         return try await request(endpoint)
     }
 
-    func createReading(meterId: UUID, rawValue: String, normalizedValue: String, confidence: Float, source: String = "manual") async throws -> ReadingResponse {
-        let body = CreateReadingRequest(meterId: meterId, rawValue: rawValue, normalizedValue: normalizedValue, confidence: confidence, source: source)
+    func createReading(meterId: UUID, rawValue: String, normalizedValue: String, confidence: Float, source: String = "manual", latitude: Double? = nil, longitude: Double? = nil) async throws -> ReadingResponse {
+        let body = CreateReadingRequest(meterId: meterId, rawValue: rawValue, normalizedValue: normalizedValue, confidence: confidence, source: source, latitude: latitude, longitude: longitude)
         return try await request("/readings/", method: "POST", body: body)
     }
 
@@ -330,7 +330,7 @@ struct ReadingsListResponse: Decodable {
     let perPage: Int
 }
 
-struct ReadingResponse: Decodable, Identifiable {
+struct ReadingResponse: Decodable, Identifiable, Hashable {
     let id: UUID
     let meterId: UUID
     let userId: UUID
@@ -351,6 +351,8 @@ struct CreateReadingRequest: Encodable {
     let normalizedValue: String
     let confidence: Float
     let source: String
+    let latitude: Double?
+    let longitude: Double?
 }
 
 struct UserStatsResponse: Decodable {
@@ -451,7 +453,7 @@ struct VoteRequest: Encodable {
     let suggestedValue: String?
 }
 
-struct VoteResponse: Decodable {
+struct VoteResponse: Decodable, Identifiable, Hashable {
     let id: UUID
     let readingId: UUID
     let verifierId: UUID
