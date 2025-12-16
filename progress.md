@@ -932,6 +932,81 @@ Push notification backend was already complete from previous Phase 2 work:
 
 ---
 
+## Session: Alembic Migrations Setup
+**Date:** 2025-12-15
+**Duration:** ~20 minutes
+
+### Completed
+
+#### Alembic Database Migrations ✅
+- [x] **Initialized Alembic** with async template
+  - `alembic init -t async alembic`
+- [x] **Configured env.py**
+  - Imports models from `src.models`
+  - Gets DATABASE_URL from environment
+  - Uses asyncpg for async migrations
+- [x] **Configured alembic.ini**
+  - Removed hardcoded database URL
+  - URL set programmatically in env.py
+- [x] **Generated initial migration**
+  - Added `email_verified` column to users
+  - Altered `stripe_customer_id` column size
+  - Added unique constraint on `stripe_customer_id`
+- [x] **Applied migration** to database
+
+#### Notification Settings UI ✅
+- [x] Added "Notifications" row in Profile → Account Actions
+- [x] Created `NotificationSettingsView` with:
+  - Permission status indicator with "Enable" button
+  - Category toggles (readings, verification, streaks, campaigns, achievements)
+  - Digest toggles (weekly digest, marketing notifications)
+  - Auto-save preferences to backend API
+
+### Files Created
+```
+api/alembic/
+├── env.py                                    # Migration environment config
+├── README                                    # Alembic readme
+├── script.py.mako                            # Migration template
+└── versions/
+    └── 630a28cc0dc3_initial_schema.py       # Initial migration
+
+api/alembic.ini                               # Alembic configuration
+```
+
+### Files Modified
+- `api/requirements.txt` - Added PyJWT dependency
+- `ios/MeterScience/Views/ProfileView.swift` - Added NotificationSettingsView
+
+### Git Commits
+- `77cb6e2` - Add notification settings UI to ProfileView
+- `bd999e8` - Set up Alembic database migrations
+
+### How to Run Migrations
+```bash
+cd api
+source venv/bin/activate
+
+# Generate new migration (after model changes)
+alembic revision --autogenerate -m "Description"
+
+# Apply migrations
+alembic upgrade head
+
+# Downgrade one step
+alembic downgrade -1
+
+# View migration history
+alembic history
+```
+
+### Next Steps
+1. Test full subscription flow end-to-end
+2. Configure APNs credentials for push notifications
+3. Test on physical iOS device
+
+---
+
 ## Session: [Next Session]
 **Date:**
 **Duration:**
